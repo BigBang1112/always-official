@@ -3,6 +3,8 @@ name: Deploy Pages
 on:
   push:
     branches: [main]
+  release:
+    types: [edited]
   workflow_run:
     workflows: [Build and publish]
     types: [completed]
