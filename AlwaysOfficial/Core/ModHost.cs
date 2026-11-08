@@ -22,6 +22,8 @@ internal static class ModHost
         // Held for the process lifetime; only the instance that created the mutex gets here.
         instanceMutex = mutex;
 
+        ReplayMetadata.Initialize(module);
+
         Log.Init(ModInfo.Name);
         Log.Write($"{ModInfo.DisplayName} {ModInfo.Version}: {Win32.ModulePath(0)}");
 

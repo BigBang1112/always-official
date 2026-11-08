@@ -300,6 +300,12 @@ internal static unsafe class RestartInputs
                     if (value.Action == Action(i))
                     {
                         value.Value = held.Sample(i, value.Value);
+
+                        if (value.Value != 0 && Memory.ReadField<int>(inputEvent, 4) == 0)
+                        {
+                            ReplayMetadata.Carried(i);
+                        }
+
                         return GameFunctions.SetInputState(store, (nint)(&value), time);
                     }
                 }

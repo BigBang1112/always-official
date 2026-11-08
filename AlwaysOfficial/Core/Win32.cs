@@ -4,6 +4,9 @@ namespace AlwaysOfficial.Core;
 
 internal static unsafe partial class Win32
 {
+    [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf8)]
+    public static partial nint GetProcAddress(nint module, string name);
+
     public const uint PAGE_EXECUTE_READWRITE = 0x40;
     public const uint PAGE_NOACCESS = 0x01;
     public const uint PAGE_GUARD = 0x100;

@@ -4,8 +4,14 @@ using AlwaysOfficial.Core;
 
 namespace AlwaysOfficial;
 
-internal static class Exports
+internal static unsafe class Exports
 {
+    [UnmanagedCallersOnly(EntryPoint = "ModArchiveEnd", CallConvs = [typeof(CallConvStdcall)])]
+    private static void ModArchiveEnd(nint archive, nint node, uint* values, uint count)
+    {
+        ReplayMetadata.ArchiveEnd(archive, node, values, count);
+    }
+
     [UnmanagedCallersOnly(EntryPoint = "ModBoot", CallConvs = [typeof(CallConvStdcall)])]
     private static int ModBoot(nint module)
     {

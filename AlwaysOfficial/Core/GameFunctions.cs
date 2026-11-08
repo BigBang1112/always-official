@@ -2,6 +2,27 @@ namespace AlwaysOfficial.Core;
 
 internal static unsafe class GameFunctions
 {
+    internal const uint GhostStartRecordAddress = 0x005dfe90;
+    internal const uint StartOfficialRecordAddress = 0x004bbb70;
+    internal const uint StopOfficialRecordAddress = 0x004bcc70;
+    internal const uint GhostDestroyAddress = 0x005e0250;
+    internal const uint WriteArchiveMaskAddress = 0x00909e60;
+    internal const uint WriteArchiveDataAddress = 0x00909a60;
+
+    public static delegate* unmanaged[Thiscall]<nint, void> StartOfficialRecord =>
+        (delegate* unmanaged[Thiscall]<nint, void>)Memory.Rebase(StartOfficialRecordAddress);
+    public static delegate* unmanaged[Thiscall]<nint, nint, void> StopOfficialRecord =>
+        (delegate* unmanaged[Thiscall]<nint, nint, void>)Memory.Rebase(StopOfficialRecordAddress);
+
+    public static delegate* unmanaged[Thiscall]<nint, nint, uint, void> GhostStartRecord =>
+        (delegate* unmanaged[Thiscall]<nint, nint, uint, void>)Memory.Rebase(GhostStartRecordAddress);
+    public static delegate* unmanaged[Thiscall]<nint, void> GhostDestroy =>
+        (delegate* unmanaged[Thiscall]<nint, void>)Memory.Rebase(GhostDestroyAddress);
+    public static delegate* unmanaged[Thiscall]<nint, uint*, uint, void> WriteArchiveMask =>
+        (delegate* unmanaged[Thiscall]<nint, uint*, uint, void>)Memory.Rebase(WriteArchiveMaskAddress);
+    public static delegate* unmanaged[Thiscall]<nint, byte*, uint, void> WriteArchiveData =>
+        (delegate* unmanaged[Thiscall]<nint, byte*, uint, void>)Memory.Rebase(WriteArchiveDataAddress);
+
     internal const uint ChallengeMainLoopAddress = 0x00491080;
     internal const uint RunAddress = 0x0047af80;
     internal const uint ChallengeResultAddress = 0x004d0270;

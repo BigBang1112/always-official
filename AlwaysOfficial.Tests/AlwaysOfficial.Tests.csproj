@@ -13,6 +13,8 @@
     <ItemGroup>
         <Compile Include="../AlwaysOfficial/OfficialSession.cs" Link="OfficialSession.cs" />
         <Compile Include="../AlwaysOfficial/HeldButtons.cs" Link="HeldButtons.cs" />
+        <Compile Include="../AlwaysOfficial/ReplayMetadataChunk.cs" Link="ReplayMetadataChunk.cs" />
+        <Compile Include="../AlwaysOfficial/ReplayMetadataSession.cs" Link="ReplayMetadataSession.cs" />
         <Compile Include="../AlwaysOfficial/Core/CallPatch.cs" Link="CallPatch.cs" />
         <Compile Include="../AlwaysOfficial/Core/UserData.cs" Link="UserData.cs" />
         <Compile Include="../AlwaysOfficial/Core/Memory.cs" Link="Memory.cs" />

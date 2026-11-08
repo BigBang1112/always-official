@@ -49,6 +49,12 @@ public class NativeTests
         return RunIsolated();
     }
 
+    [Test]
+    public Task GhostMetadataSurvivesLaterRunsAndSkipsUnrelatedNodes()
+    {
+        return RunIsolated();
+    }
+
     // AOT runtimes and installed hooks live for a process lifetime. A filtered TUnit child
     // gives each scenario a fresh DLL, mutex and static state, and contains native crashes.
     private static async Task RunIsolated([CallerMemberName] string scenario = "")

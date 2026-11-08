@@ -6,14 +6,27 @@ The **Restart in Official Mode** feature came out a long time ago as Nadeo's fir
 
 - By default, race is still in offline mode
 - *Restart in Official Mode* starts official mode as usual
-- While in official mode: retire (full respawn) automatically starts official mode again
+- While in official mode: retire (full respawn) or *Improve* button automatically starts official mode again
 - Input presses are carried over, so you dont have to re-press them again
 - Coppers are consumed only at the end of the countdown (`StartOfficialRecord`)
-  - ...so this is not a free Official Mode...
+  - ...so this is not a free Official Mode mod...
 
 It is the first C# mod integrated with TMF ModLoader (using NativeAOT).
 
-## Building
+## Installation
+
+TODO
+
+## Data
+
+This mod stores additional data in the ghosts:
+
+- Version of the mod
+- Carried-over accel/brake input status
+- Ghost start/end timestamps in milliseconds
+- Official mode start/end timestamps in milliseconds
+
+## Build
 
 Needs the .NET 10 SDK and Visual Studio (or its Build Tools) with "Desktop development with C++".
 

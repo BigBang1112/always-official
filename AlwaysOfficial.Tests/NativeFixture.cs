@@ -22,6 +22,14 @@ internal static unsafe partial class NativeFixture
     private static bool physicalBrake;
     private static nint inputPort;
     private static nint stateEvent;
+    private static nint recordedGhost;
+    private static readonly List<byte> archiveBytes = [];
+    private static int ghostStarts;
+    private static int ghostDestructions;
+    private static int officialStarts;
+    private static int officialStops;
+    private static long officialBefore;
+    private static long officialAfter;
     private static readonly int[] cachedValues = new int[7];
     private static readonly List<(nint Action, int Value, uint Time)> inputEvents = [];
     private static readonly (uint Site, uint Target)[] calls =
@@ -30,6 +38,8 @@ internal static unsafe partial class NativeFixture
         (0x4914fb, 0x4d0270), (0x4915d3, 0x490e00), (0x491e8b, 0x490e00),
         (0x4927c6, 0x490e00), (0x48b2ba, 0x62da90),
         (0x8f914a, 0x8f6f50), (0x8fc266, 0x8f6fc0),
+        (0x5dd61f, 0x5dfe90), (0x5e0cd3, 0x5e0250), (0x9242f2, 0x909e60),
+        (0x47dc30, 0x4bbb70), (0x480e7f, 0x4bcc70),
     ];
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
@@ -135,6 +145,12 @@ internal static unsafe partial class NativeFixture
         Branch(0x8f6f50, (nint)(delegate* unmanaged[Thiscall]<nint, nint, uint, int>)&FakeSetState, 0xe9);
         Branch(0x8f8160, (nint)(delegate* unmanaged[Thiscall]<nint, nint, nint>)&FakeGetActionState, 0xe9);
         Branch(0x8f6fc0, (nint)(delegate* unmanaged[Thiscall]<nint, nint, uint, int>)&FakeButtonEvent, 0xe9);
+        Branch(0x5dfe90, (nint)(delegate* unmanaged[Thiscall]<nint, nint, uint, void>)&FakeGhostStart, 0xe9);
+        Branch(0x5e0250, (nint)(delegate* unmanaged[Thiscall]<nint, void>)&FakeGhostDestroy, 0xe9);
+        Branch(0x909e60, (nint)(delegate* unmanaged[Thiscall]<nint, uint*, uint, void>)&FakeWriteMask, 0xe9);
+        Branch(0x909a60, (nint)(delegate* unmanaged[Thiscall]<nint, byte*, uint, void>)&FakeWriteData, 0xe9);
+        Branch(0x4bbb70, (nint)(delegate* unmanaged[Thiscall]<nint, void>)&FakeOfficialStart, 0xe9);
+        Branch(0x4bcc70, (nint)(delegate* unmanaged[Thiscall]<nint, nint, void>)&FakeOfficialStop, 0xe9);
         for (var i = 0; i < 6; i++)
         {
             Field<nint>(At(0xcd3f64), i * 4) = (nint)NativeMemory.AllocZeroed(0x14);
@@ -166,7 +182,11 @@ internal static unsafe partial class NativeFixture
             Check(Target(call.Site) != At(call.Target), "Verified CALL was not hooked");
         }
 
-        if (scenario == nameof(NativeTests.CountdownReleaseWithoutBufferedKeyUp))
+        if (scenario == nameof(NativeTests.GhostMetadataSurvivesLaterRunsAndSkipsUnrelatedNodes))
+        {
+            ExerciseMetadata();
+        }
+        else if (scenario == nameof(NativeTests.CountdownReleaseWithoutBufferedKeyUp))
         {
             ExerciseCountdownRelease();
         }
@@ -178,6 +198,163 @@ internal static unsafe partial class NativeFixture
         {
             ExerciseCallbacks();
         }
+    }
+
+    private static void ExerciseMetadata()
+    {
+        CreateGame();
+        var run = (delegate* unmanaged[Thiscall]<nint, nint*, int*, int, void>)Target(0x491bc8);
+        var request = (delegate* unmanaged[Thiscall]<nint, nint*, int, int, void>)Target(0x491e8b);
+        nint context = 1;
+        var status = 0;
+        request(currentApp, &context, 0, 0);
+        var manualGhost = recordedGhost;
+        EmitButton(0, true);
+        EmitButton(1, true);
+        raceStatus = 3;
+        run(gameRace, &context, &status, 0);
+        request(currentApp, &context, 0, 0);
+        var retryGhost = recordedGhost;
+        officialBefore = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        ((delegate* unmanaged[Thiscall]<nint, void>)Target(0x47dc30))(currentApp);
+        // The game may replace a recording during the same reset. Preserve the run's
+        // provenance even when the reset samples preceded creation of its final ghost.
+        var replacementGhost = (nint)NativeMemory.AllocZeroed(0x198);
+        ((delegate* unmanaged[Thiscall]<nint, nint, uint, void>)Target(0x5dd61f))(replacementGhost, 1, 0);
+        EmitButton(0, false);
+        EmitButton(1, false);
+        ((delegate* unmanaged[Thiscall]<nint, nint, void>)Target(0x480e7f))(currentApp, gameRace);
+        officialAfter = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        Check(officialStarts == 1 && officialStops == 1, "Official callbacks did not forward their arguments");
+        raceStatus = 0;
+        run(gameRace, &context, &status, 0);
+        context = 0;
+        request(currentApp, &context, 0, 0); // A later run must not change the saved ghost's flags.
+        Check(ghostStarts == 4, "Ghost start forwarding failed");
+
+        // Exercise the actual patched CALL and native EDI-capturing thunk. This helper has
+        // thiscall arguments (archive, node, values, count), preserves EDI, and pops 12 bytes.
+        byte[] helper = [0x57, 0x8b, 0x7c, 0x24, 0x08,
+            0xff, 0x74, 0x24, 0x10, 0xff, 0x74, 0x24, 0x10,
+            0x90, 0x90, 0x90, 0x90];
+        helper.CopyTo(new Span<byte>((void*)At(0x9242e1), helper.Length));
+        new byte[] { 0x5f, 0xc2, 0x0c, 0x00 }.CopyTo(new Span<byte>((void*)At(0x9242f7), 4));
+        Check(FlushInstructionCache(GetCurrentProcess(), At(0x9242e1), 26), "Cannot flush archive helper");
+        var archive = (nint)NativeMemory.AllocZeroed(0x20);
+        Field<int>(archive, 8) = 1;
+        CheckMetadata(archive, retryGhost, 3, true);
+        CheckMetadata(archive, replacementGhost, 3, true);
+        CheckMetadata(archive, manualGhost, 0);
+        CheckMetadata(archive, recordedGhost, 0);
+
+        CheckArchiveUnchanged(archive, (nint)0x123456); // Untracked or loaded nodes.
+        Field<int>(archive, 12) = 1;
+        CheckArchiveUnchanged(archive, retryGhost); // Text archive.
+        Field<int>(archive, 12) = 0;
+        Field<int>(archive, 8) = 0;
+        CheckArchiveUnchanged(archive, retryGhost); // Reading.
+        Field<int>(archive, 8) = 1;
+
+        ((delegate* unmanaged[Thiscall]<nint, void>)Target(0x5e0cd3))(retryGhost);
+        Check(ghostDestructions == 1, "Ghost destructor forwarding failed");
+        CheckArchiveUnchanged(archive, retryGhost); // Reused native addresses must not retain old metadata.
+        ((delegate* unmanaged[Thiscall]<nint, nint, uint, void>)Target(0x5dd61f))(retryGhost, 1, 0);
+        CheckMetadata(archive, retryGhost, 0);
+    }
+
+    private static void ArchiveNode(nint archive, nint node)
+    {
+        archiveBytes.Clear();
+        uint end = 0xfacade01;
+        ((delegate* unmanaged[Thiscall]<nint, nint, uint*, uint, void>)At(0x9242e1))(archive, node, &end, 1);
+    }
+
+    private static void CheckMetadata(nint archive, nint ghost, byte expectedFlags, bool timestamps = false)
+    {
+        ArchiveNode(archive, ghost);
+        using var reader = new BinaryReader(new MemoryStream(archiveBytes.ToArray()));
+        Check(reader.ReadUInt32() == 0xBB111201, "Wrong metadata chunk ID");
+        Check(reader.ReadUInt32() == 0x534b4950, "Missing skippable marker");
+        var length = reader.ReadUInt32();
+        var payloadEnd = reader.BaseStream.Position + length;
+        Check(reader.ReadByte() == 0, "Wrong metadata format version");
+        var flags = reader.ReadByte();
+        Check((flags & 3) == expectedFlags && (flags & 0xc0) == 0, "Carried-input provenance changed");
+        Check((flags & 0x30) == (timestamps ? 0x30 : 0), "Timestamp presence changed");
+        var libraryVersion = System.Diagnostics.FileVersionInfo.GetVersionInfo(NativeTestDll);
+        Check(reader.Read7BitEncodedInt() == libraryVersion.FileMajorPart, "Wrong major version");
+        Check(reader.Read7BitEncodedInt() == libraryVersion.FileMinorPart, "Wrong minor version");
+        Check(reader.Read7BitEncodedInt() == libraryVersion.FileBuildPart, "Wrong build version");
+        var revision = (flags & 4) != 0 ? reader.Read7BitEncodedInt() : 0;
+        Check(revision == libraryVersion.FilePrivatePart, "Wrong revision");
+        var productVersion = libraryVersion.ProductVersion ?? "";
+        var commit = productVersion.Contains('+') ? productVersion.Split('+')[1] : "";
+        var expectedCommit = commit.Length == 40 ? commit : new string('0', 40);
+        Check(Convert.ToHexString(reader.ReadBytes(20)).Equals(expectedCommit, StringComparison.OrdinalIgnoreCase),
+            "Wrong Git commit");
+        var runStartedAt = reader.Read7BitEncodedInt64();
+        var runEndedAt = (flags & 8) != 0 ? reader.Read7BitEncodedInt64() : 0;
+        Check(runStartedAt > 0 && (runEndedAt == 0 || runEndedAt >= runStartedAt), "Wrong run timestamps");
+        if (timestamps)
+        {
+            var startedAt = reader.Read7BitEncodedInt64();
+            var stoppedAt = reader.Read7BitEncodedInt64();
+            Check(startedAt >= officialBefore && startedAt <= officialAfter &&
+                stoppedAt >= startedAt && stoppedAt <= officialAfter, "Wrong official-call timestamps");
+        }
+        Check(reader.BaseStream.Position == payloadEnd, "Incorrect payload length");
+        // An unknown-chunk reader skips exactly this length and must land on the node terminator.
+        reader.BaseStream.Position = payloadEnd;
+        Check(reader.ReadUInt32() == 0xfacade01 && reader.BaseStream.Position == reader.BaseStream.Length,
+            "Metadata corrupted or duplicated the node terminator");
+    }
+
+    private static void CheckArchiveUnchanged(nint archive, nint node)
+    {
+        ArchiveNode(archive, node);
+        Check(archiveBytes.SequenceEqual(new byte[] { 1, 0xde, 0xca, 0xfa }), "Unrelated archive was modified");
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvThiscall)])]
+    private static void FakeGhostStart(nint ghost, nint mobil, uint time)
+    {
+        ghostStarts++;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvThiscall)])]
+    private static void FakeOfficialStart(nint app)
+    {
+        if (app == currentApp)
+        {
+            officialStarts++;
+        }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvThiscall)])]
+    private static void FakeOfficialStop(nint app, nint player)
+    {
+        if (app == currentApp && player == gameRace)
+        {
+            officialStops++;
+        }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvThiscall)])]
+    private static void FakeGhostDestroy(nint ghost)
+    {
+        ghostDestructions++;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvThiscall)])]
+    private static void FakeWriteMask(nint archive, uint* values, uint count)
+    {
+        archiveBytes.AddRange(new ReadOnlySpan<byte>(values, checked((int)count * 4)).ToArray());
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvThiscall)])]
+    private static void FakeWriteData(nint archive, byte* bytes, uint count)
+    {
+        archiveBytes.AddRange(new ReadOnlySpan<byte>(bytes, checked((int)count)).ToArray());
     }
 
     private static void ExerciseCallbacks()
@@ -526,6 +703,8 @@ internal static unsafe partial class NativeFixture
             return;
         }
 
+        recordedGhost = (nint)NativeMemory.AllocZeroed(0x198);
+        ((delegate* unmanaged[Thiscall]<nint, nint, uint, void>)Target(0x5dd61f))(recordedGhost, 1, 0);
         SampleInputs(clear: true, 0);
         SampleInputs(clear: true, 0); // ResetRaceLocal followed by ResetPlayer.
         inputEvents.Clear();

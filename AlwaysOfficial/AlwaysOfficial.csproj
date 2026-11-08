@@ -69,12 +69,12 @@
     </PropertyGroup>
 
     <!-- Generate the displayed assembly version at build time instead of retaining runtime reflection. -->
-    <Target Name="GenerateModVersion" BeforeTargets="CoreCompile" DependsOnTargets="GetAssemblyVersion">
+    <Target Name="GenerateModVersion" BeforeTargets="CoreCompile" DependsOnTargets="GetAssemblyVersion;InitializeSourceControlInformation">
         <PropertyGroup>
             <_ModVersion>$([System.Version]::Parse('$(AssemblyVersion)').ToString(3))</_ModVersion>
             <_ModVersionFile>$(IntermediateOutputPath)ModInfo.Version.g.cs</_ModVersionFile>
         </PropertyGroup>
-        <WriteLinesToFile File="$(_ModVersionFile)" Lines="namespace AlwaysOfficial { public static partial class ModInfo { private const string BuildVersion = &quot;$(_ModVersion)&quot;%3B } }" Overwrite="true" WriteOnlyWhenDifferent="true" />
+        <WriteLinesToFile File="$(_ModVersionFile)" Lines="namespace AlwaysOfficial { public static partial class ModInfo { private const string BuildVersion = &quot;$(_ModVersion)&quot;%3B private const string BuildAssemblyVersion = &quot;$(AssemblyVersion)&quot;%3B private const string BuildCommit = &quot;$(SourceRevisionId)&quot;%3B } }" Overwrite="true" WriteOnlyWhenDifferent="true" />
         <ItemGroup>
             <Compile Include="$(_ModVersionFile)" />
             <FileWrites Include="$(_ModVersionFile)" />

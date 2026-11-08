@@ -178,6 +178,11 @@ public class PluginTests
             (0x0048b2ba, 0x0062da90, "E8D1271A00"),
             (0x008f914a, 0x008f6f50, "E801DEFFFF"),
             (0x008fc266, 0x008f6fc0, "E855ADFFFF"),
+            (0x005dd61f, 0x005dfe90, "E86C280000"),
+            (0x005e0cd3, 0x005e0250, "E878F5FFFF"),
+            (0x009242f2, 0x00909e60, "E8695BFEFF"),
+            (0x0047dc30, 0x004bbb70, "E83BDF0300"),
+            (0x00480e7f, 0x004bcc70, "E8ECBD0300"),
         })
         {
             await Assert.That(CallPatch.Matches(Convert.FromHexString(hex), site, target)).IsTrue();

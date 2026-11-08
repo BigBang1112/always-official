@@ -15,7 +15,7 @@ internal static unsafe class OfficialHooks
 
     public static bool Install()
     {
-        if (sizeof(nint) != 4)
+        if (sizeof(nint) != 4 || ReplayMetadata.ArchiveThunk == 0)
         {
             return false;
         }
@@ -33,6 +33,11 @@ internal static unsafe class OfficialHooks
             new(0x0048b2ba, GameFunctions.ConfirmOfficialAddress, (nint)(delegate* unmanaged[Thiscall]<nint, int, uint, uint, nint, nint, void>)&ConfirmDetour),
             new(0x008f914a, GameFunctions.SetInputStateAddress, (nint)(delegate* unmanaged[Thiscall]<nint, nint, uint, int>)&RestartInputs.SampleDetour),
             new(0x008fc266, GameFunctions.InsertInputEventAddress, (nint)(delegate* unmanaged[Thiscall]<nint, nint, uint, int>)&RestartInputs.ButtonEventDetour),
+            new(0x005dd61f, GameFunctions.GhostStartRecordAddress, (nint)(delegate* unmanaged[Thiscall]<nint, nint, uint, void>)&ReplayMetadata.StartRecordDetour),
+            new(0x005e0cd3, GameFunctions.GhostDestroyAddress, (nint)(delegate* unmanaged[Thiscall]<nint, void>)&ReplayMetadata.DestroyDetour),
+            new(0x009242f2, GameFunctions.WriteArchiveMaskAddress, ReplayMetadata.ArchiveThunk),
+            new(0x0047dc30, GameFunctions.StartOfficialRecordAddress, (nint)(delegate* unmanaged[Thiscall]<nint, void>)&ReplayMetadata.StartOfficialDetour),
+            new(0x00480e7f, GameFunctions.StopOfficialRecordAddress, (nint)(delegate* unmanaged[Thiscall]<nint, nint, void>)&ReplayMetadata.StopOfficialDetour),
         ];
 
         try
@@ -136,9 +141,16 @@ internal static unsafe class OfficialHooks
                 RestartInputs.Reset();
             }
 
+            // A normal frame or pause/resume does not end an offline recording
+            if (*status is not (0 or 15 or 16))
+            {
+                ReplayMetadata.EndRun();
+            }
+
             if (next != *status)
             {
                 RestartInputs.Remember(currentApp, race, Memory.ReadField<nint>(currentApp, 0x198));
+                ReplayMetadata.BeginRetry();
 
                 if (Memory.ReadField<int>(currentApp, 0x268) != 0)
                 {
@@ -184,6 +196,11 @@ internal static unsafe class OfficialHooks
     {
         var automatic = !failed && session.AutomaticRequest;
 
+        if (!automatic && *context == 0)
+        {
+            ReplayMetadata.EndRun();
+        }
+
         if (automatic)
         {
             custom = session.Custom;
@@ -213,6 +230,7 @@ internal static unsafe class OfficialHooks
                 if (!official)
                 {
                     RestartInputs.Reset();
+                    ReplayMetadata.EndRun();
                 }
 
                 Log.Write(official ? "Official retry started." : "Official retry declined or failed; automatic retries disarmed.");
@@ -251,6 +269,7 @@ internal static unsafe class OfficialHooks
         var next = session.ResultChoice(choice);
         if (choice != next)
         {
+            ReplayMetadata.BeginRetry();
             *(int*)((byte*)menus + 0x700) = next;
         }
     }
@@ -259,6 +278,7 @@ internal static unsafe class OfficialHooks
     {
         session.Reset();
         RestartInputs.Reset();
+        ReplayMetadata.EndRun();
     }
 
     private static void Fail(Exception e)

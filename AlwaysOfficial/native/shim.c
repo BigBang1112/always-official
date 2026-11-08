@@ -47,6 +47,19 @@ BOOL WINAPI _DllMainCRTStartup(HMODULE module, DWORD reason, void* reserved);
 
 static HMODULE g_module;
 
+#ifndef STANDALONE_PROXY
+static void* g_archiveEnd;
+
+// Convert thiscall WriteMask to stdcall (archive, node, values, count), capturing EDI.
+__declspec(dllexport) __declspec(naked) void ModArchiveEndThunk(void) {
+    __asm pop eax
+    __asm push edi
+    __asm push ecx
+    __asm push eax
+    __asm jmp dword ptr [g_archiveEnd]
+}
+#endif
+
 // --- Boot ---------------------------------------------------------------------------------------
 
 // ModBoot in Exports.cs, looked up by name: the export table is the one stable link between the C
@@ -85,6 +98,7 @@ static void ensureBooted(void) {
         ModWaitBootedFn wait = mod ? (ModWaitBootedFn)GetProcAddress(mod, "ModWaitBooted") : 0;
         if (wait) wait();
 #else
+        g_archiveEnd = GetProcAddress(g_module, "ModArchiveEnd");
         ModBootFn boot = (ModBootFn)GetProcAddress(g_module, "ModBoot");
         if (boot) boot(g_module);
 #endif
