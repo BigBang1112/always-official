@@ -1,6 +1,6 @@
 // Writes the TMLoader feed (<out>/modloader/index.json) with the latest GitHub release as its only version.
 //
-//   dotnet run --project modloader/ModLoaderIndex -- [out, default: site]
+//   dotnet run --project ModLoader -- [out, default: site]
 //
 // GITHUB_REPOSITORY (owner/repository) names the repository; GH_TOKEN, when set, authenticates the API call.
 using System.Net.Http.Headers;

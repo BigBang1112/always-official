@@ -46,7 +46,7 @@ jobs:
           # Both DLLs are published above; republishing would overwrite the versioned dist/ files.
           dotnet test --project AlwaysOfficial.Tests/AlwaysOfficial.Tests.csproj -c Release -p:PublishModForTests=false
           if ($LASTEXITCODE -ne 0) { throw "TUnit checks failed ($LASTEXITCODE)" }
-          dotnet build modloader/ModLoaderIndex/ModLoaderIndex.csproj -c Release
+          dotnet build ModLoader/ModLoaderIndex.csproj -c Release
           if ($LASTEXITCODE -ne 0) { throw "ModLoader index tool build failed ($LASTEXITCODE)" }
       - uses: actions/upload-artifact@v4
         with:
@@ -93,7 +93,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - name: Generate the ModLoader feed from the latest release
-        run: dotnet run --project modloader/ModLoaderIndex/ModLoaderIndex.csproj -c Release -- site
+        run: dotnet run --project ModLoader/ModLoaderIndex.csproj -c Release -- site
         env:
           GH_TOKEN: ${{ github.token }}
       - uses: actions/upload-pages-artifact@v4
