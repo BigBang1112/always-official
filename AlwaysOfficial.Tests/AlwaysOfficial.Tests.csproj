@@ -17,8 +17,6 @@
         <Compile Include="../AlwaysOfficial/Core/UserData.cs" Link="UserData.cs" />
         <Compile Include="../AlwaysOfficial/Core/Memory.cs" Link="Memory.cs" />
         <Compile Include="../AlwaysOfficial/Core/Win32.cs" Link="Win32.cs" />
-        <Compile Include="../modloader/ModLoaderIndex/IndexBuilder.cs" Link="IndexBuilder.cs" />
-        <Compile Include="../modloader/ModLoaderIndex/Models.cs" Link="Models.cs" />
     </ItemGroup>
         
     <ItemGroup>

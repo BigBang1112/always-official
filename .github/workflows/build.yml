@@ -92,8 +92,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - name: Generate ModLoader JSON feeds from published releases
-        run: dotnet run --project modloader/ModLoaderIndex/ModLoaderIndex.csproj -c Release -- --out site
+      - name: Generate the ModLoader feed from the latest release
+        run: dotnet run --project modloader/ModLoaderIndex/ModLoaderIndex.csproj -c Release -- site
         env:
           GH_TOKEN: ${{ github.token }}
       - uses: actions/upload-pages-artifact@v4

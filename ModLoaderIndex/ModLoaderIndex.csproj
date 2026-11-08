@@ -8,9 +8,4 @@
         <!-- All JSON goes through the source-generated IndexJsonContext. -->
         <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
     </PropertyGroup>
-
-    <ItemGroup>
-        <!-- The feed template (product details and what every version shares) for both channels. -->
-        <None Include="..\index.json" Link="index.json" CopyToOutputDirectory="PreserveNewest" />
-    </ItemGroup>
 </Project>
