@@ -67,7 +67,8 @@ public static class Log
 
     public static void Write(string message)
     {
-        var line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}";
+        Win32.GetLocalTime(out var time);
+        var line = $"[{time.Year:D4}-{time.Month:D2}-{time.Day:D2} {time.Hour:D2}:{time.Minute:D2}:{time.Second:D2}.{time.Milliseconds:D3}] {message}";
 
         lock (gate)
         {

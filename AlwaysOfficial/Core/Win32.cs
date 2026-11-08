@@ -10,6 +10,15 @@ internal static unsafe partial class Win32
     public const uint MEM_COMMIT = 0x1000;
     public const int ERROR_ALREADY_EXISTS = 183;
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SYSTEMTIME
+    {
+        public ushort Year, Month, DayOfWeek, Day, Hour, Minute, Second, Milliseconds;
+    }
+
+    [LibraryImport("kernel32.dll")]
+    public static partial void GetLocalTime(out SYSTEMTIME time);
+
     [LibraryImport("user32.dll")]
     public static partial short GetAsyncKeyState(int virtualKey);
 

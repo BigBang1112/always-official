@@ -23,9 +23,10 @@
         <SelfContained>true</SelfContained>
         <InvariantGlobalization>true</InvariantGlobalization>
         <UseSystemResourceKeys>true</UseSystemResourceKeys>
-        <IlcGenerateStackTraceData>true</IlcGenerateStackTraceData>
-        <StackTraceSupport>true</StackTraceSupport>
+        <StackTraceSupport Condition="'$(Configuration)' == 'Release'">false</StackTraceSupport>
+        <DebuggerSupport Condition="'$(Configuration)' == 'Release'">false</DebuggerSupport>
         <EventSourceSupport>false</EventSourceSupport>
+        <OptimizationPreference>Size</OptimizationPreference>
     </PropertyGroup>
 
     <PropertyGroup Label="Native shim">
@@ -66,6 +67,19 @@
         <DistDir>$(RepositoryRoot)dist\</DistDir>
         <AlwaysOfficialPackageStaging>$(MSBuildProjectDirectory)\obj\$(Configuration)\package\</AlwaysOfficialPackageStaging>
     </PropertyGroup>
+
+    <!-- Generate the displayed assembly version at build time instead of retaining runtime reflection. -->
+    <Target Name="GenerateModVersion" BeforeTargets="CoreCompile" DependsOnTargets="GetAssemblyVersion">
+        <PropertyGroup>
+            <_ModVersion>$([System.Version]::Parse('$(AssemblyVersion)').ToString(3))</_ModVersion>
+            <_ModVersionFile>$(IntermediateOutputPath)ModInfo.Version.g.cs</_ModVersionFile>
+        </PropertyGroup>
+        <WriteLinesToFile File="$(_ModVersionFile)" Lines="namespace AlwaysOfficial { public static partial class ModInfo { private const string BuildVersion = &quot;$(_ModVersion)&quot;%3B } }" Overwrite="true" WriteOnlyWhenDifferent="true" />
+        <ItemGroup>
+            <Compile Include="$(_ModVersionFile)" />
+            <FileWrites Include="$(_ModVersionFile)" />
+        </ItemGroup>
+    </Target>
 
     <UsingTask TaskName="AlwaysOfficialPrependPath" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
         <ParameterGroup>
