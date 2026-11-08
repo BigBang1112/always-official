@@ -56,6 +56,8 @@ internal static unsafe class RestartInputs
             return;
         }
 
+        // CInputPort::GetActionState queries the embedded store at port+0x40 with time -1.
+        // Its result is a shared static SInputEvent buffer, so read each value before calling again.
         var get = (delegate* unmanaged[Thiscall]<nint, nint, nint>)Memory.Rebase(0x008f8160);
 
         var accelerate = held.Sample(0, Read<int>(get(port, Action(0)), 4)) != 0;
@@ -185,6 +187,9 @@ internal static unsafe class RestartInputs
                 Action = Action(button),
                 Value = 0
             };
+
+            // CInputEventsStore::SetState inserts only when the converted value differs
+            // from the stored state at this time. Inject into the same store as the sampler.
             ((delegate* unmanaged[Thiscall]<nint, nint, uint, int>)Memory.Rebase(0x008f6f50))(inputOwner.Port + 0x40, (nint)(&released), tick);
             Log.Write($"Remembered {(button == 0 ? "accelerator" : "brake")} released by keyboard state.");
         }
@@ -287,6 +292,8 @@ internal static unsafe class RestartInputs
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvThiscall)])]
     public static int SampleDetour(nint store, nint inputEvent, uint time)
     {
+        // CALL 0x008f914a in CInputPort::ReadCurMapLatestEventsFromHarware -> SetState.
+        // Preserve remembered accelerator/brake values when restart sampling clears them.
         try
         {
             PollKeyboard();
@@ -317,6 +324,9 @@ internal static unsafe class RestartInputs
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvThiscall)])]
     public static int ButtonEventDetour(nint store, nint inputEvent, uint time)
     {
+        // CALL 0x008fc266 in CInputPortDx8::GatherLatestInputs -> InsertSorted
+        // Unlike SetState, this converts and inserts without checking for a changed value
+        // The site also handles non-button events, only matching zero-valued releases matter here
         try
         {
             // This CALL is in DirectInput's buffered-event path, not ClearInputs sampler

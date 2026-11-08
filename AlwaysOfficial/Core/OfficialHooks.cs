@@ -13,15 +13,24 @@ internal static unsafe class OfficialHooks
     internal static bool AutomaticInputTransition => !failed && session.AutomaticRequest;
     private static bool failed = true;
 
+    // CTrackManiaRace::Run
+    // yields the race status through the third argument
     private static delegate* unmanaged[Thiscall]<nint, nint*, int*, int, void> Run =>
         (delegate* unmanaged[Thiscall]<nint, nint*, int*, int, void>)Memory.Rebase(0x0047af80);
 
+    // CTrackManiaMenus::DialogChallengeResult
+    // writes the menu choice at menus+0x700
     private static delegate* unmanaged[Thiscall]<nint, nint*, int, void> Result =>
         (delegate* unmanaged[Thiscall]<nint, nint*, int, void>)Memory.Rebase(0x004d0270);
 
+    // CTrackMania::RequestOfficialRace(context, resetPlayer, custom)
+    // custom selects RequestCustomOfficialRace, otherwise it requests StartOfficialRecord
     private static delegate* unmanaged[Thiscall]<nint, nint*, int, int, void> Request =>
         (delegate* unmanaged[Thiscall]<nint, nint*, int, int, void>)Memory.Rebase(0x00490e00);
 
+    // CGameCtnMenus::DialogConfirmOfficial(allowed, cost, balance, title, message)
+    // title/message point to CFastStringInt objects
+    // this function only presents the request UI
     private static delegate* unmanaged[Thiscall]<nint, int, uint, uint, nint, nint, void> Confirm =>
         (delegate* unmanaged[Thiscall]<nint, int, uint, uint, nint, nint, void>)Memory.Rebase(0x0062da90);
 
@@ -34,6 +43,8 @@ internal static unsafe class OfficialHooks
             return false;
         }
 
+        // Patch individual CALL sites so unrelated callers retain the game's behavior
+        // In particular, only the normal solo Run call is wrapped, not cleanup Run calls
         Patch[] patches = [
             new(0x0049cdaf, 0x00491080, (nint)(delegate* unmanaged[Thiscall]<nint, nint*, void>)&ChallengeDetour),
             new(0x00491bc8, 0x0047af80, (nint)(delegate* unmanaged[Thiscall]<nint, nint*, int*, int, void>)&RunDetour),
@@ -105,6 +116,8 @@ internal static unsafe class OfficialHooks
 
     private static void Observe(nint app, nint race)
     {
+        // CTrackMania: +0x198 challenge, +0x454 race, +0x268 official active, +0x26c custom official mode
+        // Preserve the mode when requesting another run
         currentApp = app;
         var challenge = Read<nint>(app, 0x198);
         RestartInputs.Observe(app, race, challenge);
@@ -114,6 +127,8 @@ internal static unsafe class OfficialHooks
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvThiscall)])]
     private static void ChallengeDetour(nint app, nint* context)
     {
+        // SMwFiberContext*: null starts a fiber, -1 marks completion, +4 holds its resume state
+        // These are cooperative calls, so one invocation need not complete the operation
         try
         {
             if (!failed)
@@ -127,6 +142,7 @@ internal static unsafe class OfficialHooks
                 Observe(app, Read<nint>(app, 0x454));
 
                 // ChallengeMainLoop waits at 0x1927 for the pause menu choice
+                // app+0x194 is the menu manager, translate its choice before the game consumes it
                 if (*context != 0 && *context != -1 && Read<int>(*context, 4) == 0x1927)
                 {
                     var menus = Read<nint>(app, 0x194);
@@ -170,6 +186,8 @@ internal static unsafe class OfficialHooks
             Fail(e);
         }
 
+        // Run copies CGameRace's status at +0x50 to status. OfficialSession changes armed
+        // retry statuses 3/4 to 13 so ChallengeMainLoop takes its official-request branch.
         Run(race, context, status, flags);
 
         try
@@ -192,6 +210,8 @@ internal static unsafe class OfficialHooks
 
                 if (Read<int>(currentApp, 0x268) != 0)
                 {
+                    // CTrackMania::CancelOfficialRecord -> DoStopOfficialRecord(-2, -2)
+                    // stop the previous official recording before starting its replacement
                     ((delegate* unmanaged[Thiscall]<nint, void>)Memory.Rebase(0x004bcc60))(currentApp);
                 }
 
@@ -207,6 +227,7 @@ internal static unsafe class OfficialHooks
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvThiscall)])]
     private static void ResultDetour(nint menus, nint* context, int flags)
     {
+        // Both result-dialog CALL sites use this hook
         Result(menus, context, flags);
 
         try
@@ -242,6 +263,7 @@ internal static unsafe class OfficialHooks
             custom = session.Custom;
         }
 
+        // RequestOperation is shared with other operations
         insideOfficialRequest = automatic;
 
         try
@@ -256,6 +278,8 @@ internal static unsafe class OfficialHooks
         {
             if (automatic && *context == -1)
             {
+                // Completion includes denial/failure. Success is the official flag, set by
+                // RequestOfficialRace after PayRequest, together with the custom mode at +0x26c.
                 var official = Read<int>(app, 0x268) != 0;
 
                 session.RequestCompleted(official);
@@ -281,8 +305,8 @@ internal static unsafe class OfficialHooks
         {
             if (!failed && insideOfficialRequest && session.SkipConfirmation(allowed != 0))
             {
-                // The same choice as DialogConfirmOfficial_OnOk
-                // RequestOperation then performs PayRequest
+                // The same choice as DialogConfirmOfficial_OnOk.
+                // Skip only the allowed confirmation UI, the original request still authorizes and pays for the run
                 *(int*)((byte*)menus + 0x700) = 0x1f;
                 return;
             }

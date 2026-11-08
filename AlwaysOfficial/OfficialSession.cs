@@ -54,6 +54,8 @@ internal sealed class OfficialSession
         if (Armed && choice == 0x1f)
         {
             AutomaticRequest = true;
+
+            // Menu retry (0x1f) becomes official retry (0x6d), or custom official retry (0x6e)
             return Custom != 0 ? 0x6e : 0x6d;
         }
 
