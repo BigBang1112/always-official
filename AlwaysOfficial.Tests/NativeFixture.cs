@@ -206,6 +206,7 @@ internal static unsafe partial class NativeFixture
         var request = (delegate* unmanaged[Thiscall]<nint, nint*, int, int, void>)Target(0x491e8b);
         nint context = 1;
         var status = 0;
+        run(gameRace, &context, &status, 0); // Establish the local race before recordings start.
         request(currentApp, &context, 0, 0);
         var manualGhost = recordedGhost;
         run(gameRace, &context, &status, 0);
@@ -239,7 +240,9 @@ internal static unsafe partial class NativeFixture
         run(gameRace, &context, &status, 0);
         context = 0;
         request(currentApp, &context, 0, 0); // A later run must not change the saved ghost's flags.
-        Check(ghostStarts == 4, "Ghost start forwarding failed");
+        var remoteGhost = (nint)NativeMemory.AllocZeroed(0x198);
+        ((delegate* unmanaged[Thiscall]<nint, nint, uint, void>)Target(0x5dd61f))(remoteGhost, 2, 0);
+        Check(ghostStarts == 5, "Ghost start forwarding failed");
 
         // Exercise the actual patched CALL and native EDI-capturing thunk. This helper has
         // thiscall arguments (archive, node, values, count), preserves EDI, and pops 12 bytes.
@@ -251,6 +254,7 @@ internal static unsafe partial class NativeFixture
         Check(FlushInstructionCache(GetCurrentProcess(), At(0x9242e1), 26), "Cannot flush archive helper");
         var archive = (nint)NativeMemory.AllocZeroed(0x20);
         Field<int>(archive, 8) = 1;
+        CheckArchiveUnchanged(archive, remoteGhost);
         var otherPlayer = (nint)NativeMemory.AllocZeroed(0x318);
         ((delegate* unmanaged[Thiscall]<nint, uint, int, void>)Target(0x47c2c6))(otherPlayer, 123, 1);
         ((delegate* unmanaged[Thiscall]<nint, uint, int, void>)Target(0x480e8f))(otherPlayer, 123, 2);
@@ -272,6 +276,9 @@ internal static unsafe partial class NativeFixture
         CheckArchiveUnchanged(archive, retryGhost); // Reused native addresses must not retain old metadata.
         ((delegate* unmanaged[Thiscall]<nint, nint, uint, void>)Target(0x5dd61f))(retryGhost, 1, 0);
         CheckMetadata(archive, retryGhost, 0);
+        // Reusing a previously tracked address for a remote ghost must remove local metadata.
+        ((delegate* unmanaged[Thiscall]<nint, nint, uint, void>)Target(0x5dd61f))(retryGhost, 2, 0);
+        CheckArchiveUnchanged(archive, retryGhost);
     }
 
     private static void Transition(int state)
@@ -435,6 +442,9 @@ internal static unsafe partial class NativeFixture
         gameMenus = (nint)NativeMemory.AllocZeroed(0x1000);
         Field<nint>(gameRace, 0x18) = currentApp;
         Field<nint>(currentApp, 0x454) = gameRace;
+        var player = (nint)NativeMemory.AllocZeroed(0x2c);
+        Field<nint>(gameRace, 0x238) = player;
+        Field<nint>(player, 0x28) = 1; // Local CGameMobil; remote recordings use 2.
         Field<nint>(currentApp, 0x194) = gameMenus;
         Field<nint>(currentApp, 0x198) = (nint)NativeMemory.AllocZeroed(4);
         inputPort = (nint)NativeMemory.AllocZeroed(0x100);

@@ -50,14 +50,36 @@ internal static unsafe class ReplayMetadata
     {
         try
         {
+            var local = IsLocalMobil(mobil);
             lock (gate)
             {
-                session.StartRecord(ghost);
+                if (local)
+                {
+                    session.StartRecord(ghost);
+                }
+                else
+                {
+                    session.Destroy(ghost);
+                }
             }
         }
         catch { } // Metadata must not prevent the game from starting a recording
 
         GameFunctions.GhostStartRecord(ghost, mobil, time);
+    }
+
+    private static bool IsLocalMobil(nint mobil)
+    {
+        var race = OfficialHooks.CurrentRace;
+        if (race == 0 || mobil == 0)
+        {
+            return false;
+        }
+
+        var info = GameFunctions.GetLocalPlayerInfo(race);
+        var player = info == 0 ? 0 : Memory.ReadField<nint>(info, 0x238);
+        // Match the CGameMobil supplied by CGameCtnReplayRecord::StartRecord.
+        return player != 0 && Memory.ReadField<nint>(player, 0x28) == mobil;
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvThiscall)])]
