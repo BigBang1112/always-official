@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <OutputType>Library</OutputType>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <RootNamespace>AlwaysOfficial</RootNamespace>
+        <AssemblyName>AlwaysOfficial</AssemblyName>
+        <Version>0.1.0</Version>
+        <DefineConstants Condition="'$(NativeTestBuild)' == 'true'">$(DefineConstants);NATIVE_TESTS</DefineConstants>
+        <RuntimeIdentifier>win-x86</RuntimeIdentifier>
+        <PublishAot>true</PublishAot>
+        <NativeLib>Shared</NativeLib>
+        <SelfContained>true</SelfContained>
+        <InvariantGlobalization>true</InvariantGlobalization>
+        <UseSystemResourceKeys>true</UseSystemResourceKeys>
+        <IlcGenerateStackTraceData>true</IlcGenerateStackTraceData>
+        <StackTraceSupport>true</StackTraceSupport>
+        <EventSourceSupport>false</EventSourceSupport>
+        <ShimSource>$(MSBuildThisFileDirectory)native\shim.c</ShimSource>
+        <ShimObject>$(MSBuildProjectDirectory)\obj\$(Configuration)\$(TargetFramework)\$(RuntimeIdentifier)\shim.obj</ShimObject>
+        <ShimCompilerFlags Condition="'$(Configuration)' == 'Debug'">/Od /Z7</ShimCompilerFlags>
+        <ShimCompilerFlags Condition="'$(Configuration)' != 'Debug'">/O2</ShimCompilerFlags>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <NativeLibrary Include="$(ShimObject)" />
+        <LinkerArg Include="/ENTRY:ModEntry" />
+    </ItemGroup>
+
+    <Target Name="CompileModShim" BeforeTargets="LinkNative" DependsOnTargets="SetupOSSpecificProps" Inputs="$(ShimSource);$(MSBuildProjectFullPath)" Outputs="$(ShimObject)">
+        <Error Condition="!Exists('$(_CppToolsDirectory)cl.exe')" Text="cl.exe not found in '$(_CppToolsDirectory)'. Install the MSVC x86/x64 build tools, and build with build.ps1 (it puts vswhere on PATH)." />
+        <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(ShimObject)'))" />
+        <Exec Command="&quot;$(_CppToolsDirectory)cl.exe&quot; /nologo /c $(ShimCompilerFlags) /GS- /Zl /W4 /WX /Fo&quot;$(ShimObject)&quot; &quot;$(ShimSource)&quot;" />
+    </Target>
+</Project>

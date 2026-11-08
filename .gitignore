@@ -1,0 +1,10 @@
+build/
+dist/
+bin/
+obj/
+.vs/
+*.user
+*.zip
+TestResults/
+node_modules/
+site/

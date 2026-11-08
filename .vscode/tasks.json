@@ -1,0 +1,58 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Always Official: build Debug",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/build.ps1",
+        "-Configuration",
+        "Debug"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": "$msCompile",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "Always Official: prepare TMUF debugging",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/install-standalone.ps1",
+        "-GameDir",
+        "${input:tmufGameDirectory}",
+        "-Dll",
+        "${workspaceFolder}/build/Debug/AlwaysOfficial.dll"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "dependsOn": "Always Official: build Debug",
+      "dependsOrder": "sequence",
+      "problemMatcher": [
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "id": "tmufGameDirectory",
+      "type": "promptString",
+      "description": "TMUF installation folder for installing the debug mod (use the same folder as the debugger)",
+      "default": "C:/Program Files (x86)/TmUnitedForever"
+    }
+  ]
+}
