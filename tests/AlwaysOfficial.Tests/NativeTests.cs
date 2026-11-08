@@ -14,6 +14,12 @@ public class NativeTests
     }
 
     [Test]
+    public Task StandaloneProxyLoadsAdjacentModAndForwards()
+    {
+        return RunIsolated();
+    }
+
+    [Test]
     public Task DistributedDllLoadsAndForwards()
     {
         return RunIsolated();

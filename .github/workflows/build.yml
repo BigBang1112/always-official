@@ -20,13 +20,9 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: tools/package-lock.json
-      - run: npm ci --prefix tools
-      - run: npm test --prefix tools
+      - name: Check ModLoader JSON indexes
+        shell: pwsh
+        run: ./modloader/test-index.ps1
       - name: Build and test x86 plugin
         shell: pwsh
         run: |
@@ -43,7 +39,9 @@ jobs:
             $actual = (Get-Item dist/AlwaysOfficial.dll).VersionInfo.ProductVersion -replace '\+.*$', ''
             if ($actual -ne $version) { throw "DLL version '$actual' does not match tag '$version'" }
           }
-          Copy-Item product/version.yaml dist/version.yaml
+          Copy-Item modloader/version.yaml dist/version.yaml
+          Compress-Archive -LiteralPath dist/AlwaysOfficial.dll -DestinationPath dist/AlwaysOfficial-modloader.zip -Force
+          Compress-Archive -LiteralPath dist/AlwaysOfficial.dll,dist/d3d9.dll -DestinationPath dist/AlwaysOfficial-standalone.zip -Force
       - uses: actions/upload-artifact@v4
         with:
           name: AlwaysOfficial-win-x86
@@ -54,14 +52,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view $env:GITHUB_REF_NAME
-          if ($LASTEXITCODE -ne 0) {
-            $arguments = @('release', 'create', $env:GITHUB_REF_NAME, '--verify-tag', '--generate-notes', '--draft')
-            gh @arguments
-            if ($LASTEXITCODE -ne 0) { throw 'Release creation failed' }
+          $existing = gh release view $env:GITHUB_REF_NAME --json isDraft
+          if ($LASTEXITCODE -eq 0) {
+            if (($existing | ConvertFrom-Json).isDraft) { throw 'A draft already exists for this tag; resolve it before retrying.' }
+            Write-Host 'Release already published; leaving its immutable assets unchanged.'
+            exit 0
           }
-          gh release upload $env:GITHUB_REF_NAME dist/AlwaysOfficial.dll dist/AlwaysOfficial.pdb dist/version.yaml --clobber
-          if ($LASTEXITCODE -ne 0) { throw 'Release upload failed' }
+          # Upload every asset while the release is a draft, before immutability applies.
+          gh release create $env:GITHUB_REF_NAME dist/AlwaysOfficial.dll dist/AlwaysOfficial.pdb dist/AlwaysOfficial-modloader.zip dist/AlwaysOfficial-standalone.zip dist/version.yaml --verify-tag --generate-notes --draft
+          if ($LASTEXITCODE -ne 0) { throw 'Release creation failed' }
           $prerelease = if ($env:GITHUB_REF_NAME.Contains('-')) { 'true' } else { 'false' }
           gh release edit $env:GITHUB_REF_NAME --draft=false "--prerelease=$prerelease"
           if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }
@@ -82,19 +81,13 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: tools/package-lock.json
-      - run: npm ci --prefix tools
       - uses: actions/configure-pages@v5
         id: pages
-      - name: Generate ModLoader feeds and archives
-        run: node tools/modloader-server.mjs site
+      - name: Generate ModLoader JSON feeds from published releases
+        shell: pwsh
+        run: ./modloader/build-index.ps1
         env:
           GH_TOKEN: ${{ github.token }}
-          PAGES_BASE_URL: ${{ steps.pages.outputs.base_url }}
       - uses: actions/upload-pages-artifact@v4
         with:
           path: site

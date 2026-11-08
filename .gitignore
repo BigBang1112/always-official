@@ -6,5 +6,4 @@ obj/
 *.user
 *.zip
 TestResults/
-node_modules/
 site/

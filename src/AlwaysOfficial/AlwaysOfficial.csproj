@@ -34,4 +34,7 @@
         <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(ShimObject)'))" />
         <Exec Command="&quot;$(_CppToolsDirectory)cl.exe&quot; /nologo /c $(ShimCompilerFlags) /GS- /Zl /W4 /WX /Fo&quot;$(ShimObject)&quot; &quot;$(ShimSource)&quot;" />
     </Target>
+    <Target Name="BuildStandaloneProxy" AfterTargets="Publish" DependsOnTargets="SetupOSSpecificProps" Condition="'$(NativeTestBuild)' != 'true'">
+        <Exec Command="&quot;$(_CppToolsDirectory)cl.exe&quot; /nologo /LD /DSTANDALONE_PROXY $(ShimCompilerFlags) /GS- /Zl /W4 /WX /Fo&quot;$(ShimObject).proxy.obj&quot; /Fe&quot;$(PublishDir)d3d9.dll&quot; &quot;$(ShimSource)&quot; /link /NODEFAULTLIB /ENTRY:ProxyEntry @(AdditionalNativeLibraryDirectories->'/LIBPATH:&quot;%(Identity)&quot;', ' ') kernel32.lib /PDB:&quot;$(PublishDir)d3d9.pdb&quot;" />
+    </Target>
 </Project>

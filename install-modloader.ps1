@@ -20,8 +20,8 @@ if (-not (Test-Path $loader)) {
 $product = "$loader\database\TmForever\products\$name"
 $target = "$product\$Version"
 New-Item -ItemType Directory -Force -Path $target | Out-Null
-Copy-Item "$root\product\description.yaml" "$product\description.yaml"
-Copy-Item "$root\product\version.yaml" "$target\description.yaml"
+Copy-Item "$root\modloader\description.yaml" "$product\description.yaml"
+Copy-Item "$root\modloader\version.yaml" "$target\description.yaml"
 Copy-Item $Dll "$target\$name.dll"
 Write-Host "Installed Always Official $Version to $target" -ForegroundColor Green
 Write-Host "Open the ModLoader, tick 'Always Official' and start the game. Log: $name.log in the game's active user-data directory."

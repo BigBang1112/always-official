@@ -75,6 +75,19 @@ internal static unsafe partial class NativeFixture
     {
         Check(IntPtr.Size == 4, "Native checks require an x86 TUnit process");
         var root = NativeTests.FindRoot();
+        if (scenario == nameof(NativeTests.StandaloneProxyLoadsAdjacentModAndForwards))
+        {
+            var proxy = NativeLibrary.Load(Path.Combine(root, "dist", "d3d9.dll"));
+            Check(NativeLibrary.TryGetExport(proxy, "AlwaysOfficialStandaloneProxy", out _), "Proxy marker is missing");
+            Check(!NativeLibrary.TryGetExport(proxy, "ModBoot", out _), "The proxy must not contain the mod runtime");
+            var create9 = (delegate* unmanaged[Stdcall]<uint, nint>)NativeLibrary.GetExport(proxy, "Direct3DCreate9");
+            var instance = create9(32);
+            Check(instance != 0, "Standalone Direct3D forwarding failed");
+            ((delegate* unmanaged[Stdcall]<nint, uint>)(*(nint**)instance)[2])(instance);
+            var mod = Win32.GetModuleHandle("AlwaysOfficial.dll");
+            Check(mod != 0 && NativeLibrary.TryGetExport(mod, "ModBoot", out _), "Proxy did not load the adjacent mod");
+            return;
+        }
         var production = scenario == nameof(NativeTests.DistributedDllLoadsAndForwards);
         var path = Path.Combine(root, production ? "dist" : "build/native-tests", "AlwaysOfficial.dll");
         Check(File.Exists(path), $"Missing {path}. Run build.ps1 -Tests first.");

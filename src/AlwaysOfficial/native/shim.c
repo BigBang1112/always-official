@@ -3,8 +3,8 @@
 // 1. The DLL entry point. Native AOT links its own DllMain, so ours is a separate entry point
 //    (/ENTRY:ModEntry in the .csproj). It runs the CRT and AOT start-up first, then starts the
 //    boot thread. Managed code never runs under the loader lock: the boot thread waits for it.
-// 2. The d3d9.dll exports for standalone mode (the DLL copied next to TmForever.exe as d3d9.dll),
-//    forwarded to the system d3d9.dll. Loaded by the ModLoader under its own name they go unused.
+// 2. STANDALONE_PROXY builds a separate d3d9.dll that loads the adjacent AlwaysOfficial.dll
+//    and forwards Direct3D to Windows. The mod retains forwarding exports for compatibility.
 // 3. Naked forwarding stubs: they leave every register and stack argument as the caller left them,
 //    so the exports with undocumented signatures forward correctly.
 //
@@ -31,6 +31,7 @@ IMPORT BOOL WINAPI CloseHandle(HANDLE handle);
 IMPORT void* WINAPI GetProcAddress(HMODULE module, const char* name);
 IMPORT HMODULE WINAPI LoadLibraryW(const WCHAR* path);
 IMPORT UINT WINAPI GetSystemDirectoryW(WCHAR* buffer, UINT size);
+IMPORT DWORD WINAPI GetModuleFileNameW(HMODULE module, WCHAR* buffer, DWORD size);
 IMPORT DWORD WINAPI GetCurrentThreadId(void);
 IMPORT void WINAPI Sleep(DWORD milliseconds);
 
@@ -39,7 +40,9 @@ long _InterlockedExchange(long volatile* target, long value);
 #pragma intrinsic(_InterlockedCompareExchange, _InterlockedExchange)
 
 // The CRT's own entry point. It initialises the CRT and calls DllMain (Native AOT's).
+#ifndef STANDALONE_PROXY
 BOOL WINAPI _DllMainCRTStartup(HMODULE module, DWORD reason, void* reserved);
+#endif
 
 static HMODULE g_module;
 
@@ -58,8 +61,22 @@ static void ensureBooted(void) {
     if (g_bootState == 2) return;
     if (_InterlockedCompareExchange(&g_bootState, 1, 0) == 0) {
         g_bootThread = GetCurrentThreadId();
-        ModBootFn boot = (ModBootFn)GetProcAddress(g_module, "ModBoot");
-        if (boot) boot(g_module);
+        HMODULE mod = g_module;
+#ifdef STANDALONE_PROXY
+        // Resolve beside this proxy, independently of the process working directory.
+        static WCHAR path[32768];
+        DWORD length = GetModuleFileNameW(g_module, path, 32768);
+        if (length && length < 32768) {
+            while (length && path[length - 1] != L'\\') length--;
+            const WCHAR* name = L"AlwaysOfficial.dll";
+            if (length && length + 19 < 32768) {
+                for (DWORD i = 0; (path[length + i] = name[i]) != 0; i++) {}
+                mod = LoadLibraryW(path);
+            } else mod = 0;
+        } else mod = 0;
+#endif
+        ModBootFn boot = mod ? (ModBootFn)GetProcAddress(mod, "ModBoot") : 0;
+        if (boot) boot(mod);
         _InterlockedExchange(&g_bootState, 2);
         return;
     }
@@ -73,8 +90,16 @@ static DWORD WINAPI bootThread(void* unused) {
     return 0;
 }
 
+#ifdef STANDALONE_PROXY
+// A small native proxy, without the managed runtime or game hooks.
+__declspec(dllexport) void AlwaysOfficialStandaloneProxy(void) {}
+BOOL WINAPI ProxyEntry(HMODULE module, DWORD reason, void* reserved) {
+    (void)reserved;
+    BOOL ok = 1;
+#else
 BOOL WINAPI ModEntry(HMODULE module, DWORD reason, void* reserved) {
     BOOL ok = _DllMainCRTStartup(module, reason, reserved);
+#endif
     if (ok && reason == DLL_PROCESS_ATTACH) {
         g_module = module;
         HANDLE thread = CreateThread(0, 0, bootThread, 0, 0, 0);

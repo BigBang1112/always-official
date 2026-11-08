@@ -1,4 +1,4 @@
-# Builds the mod: one native 32-bit DLL in dist\.
+# Builds the native 32-bit mod and standalone d3d9 loader in dist\.
 #
 #   powershell -ExecutionPolicy Bypass -File build.ps1 [-Configuration Release|Debug] [-Tests] [-Version 0.1.0]
 #
@@ -30,6 +30,7 @@ if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed ($LASTEXITCODE)" }
 $dist = Join-Path $root "dist"
 New-Item -ItemType Directory -Force $dist | Out-Null
 Copy-Item "$root\build\$Configuration\$name.dll" "$dist\$name.dll" -Force
+Copy-Item "$root\build\$Configuration\d3d9.dll" "$dist\d3d9.dll" -Force
 if (Test-Path "$root\build\$Configuration\$name.pdb") { Copy-Item "$root\build\$Configuration\$name.pdb" "$dist\$name.pdb" -Force }
 Write-Host "Built $dist\$name.dll" -ForegroundColor Green
 
