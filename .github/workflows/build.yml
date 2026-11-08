@@ -34,6 +34,7 @@ jobs:
           name: AlwaysOfficial-win-x86
           path: |
             dist/AlwaysOfficial.dll
+            dist/AlwaysOfficial-modloader.zip
             dist/AlwaysOfficial-standalone.zip
 
       - name: Publish release
@@ -43,4 +44,4 @@ jobs:
         run: |
           $version = (Get-Item dist/AlwaysOfficial.dll).VersionInfo.ProductVersion -replace '\+.*$', ''
           $tag = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { "v$version" }
-          gh release create $tag dist/AlwaysOfficial.dll dist/AlwaysOfficial-standalone.zip --target $env:GITHUB_SHA --generate-notes "--prerelease=$($tag.Contains('-'))"
+          gh release create $tag dist/AlwaysOfficial.dll dist/AlwaysOfficial-modloader.zip dist/AlwaysOfficial-standalone.zip --target $env:GITHUB_SHA --generate-notes "--prerelease=$($tag.Contains('-'))"

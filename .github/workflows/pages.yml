@@ -42,21 +42,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p site/modloader
-          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --paginate --slurp |
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --paginate --slurp -H 'Accept: application/vnd.github.text+json' |
             jq -e --arg homepage "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" '
               add | map(select(.draft == false and .prerelease == false)) |
               max_by(.published_at) as $release |
               if $release == null then
                 {api: 1, game: "TmForever", products: {}}
               else
-                (first($release.assets[] | select(.name == "AlwaysOfficial-standalone.zip")) //
-                  error("Release has no AlwaysOfficial-standalone.zip")) as $archive |
+                (first($release.assets[] | select(.name == "AlwaysOfficial-modloader.zip")) //
+                  error("Release has no AlwaysOfficial-modloader.zip")) as $archive |
                 if (($archive.digest // "") | test("^sha256:[0-9a-fA-F]{64}$")) then
                   {
                     api: 1,
                     game: "TmForever",
                     products: {
-                      AlwaysOfficial: {
+                      "Always Official": {
                         name: "Always Official",
                         author: "BigBang1112",
                         type: "modification",
@@ -68,8 +68,8 @@ jobs:
                             dependencies: [{id: "CoreMod", version: "^1.0.1"}],
                             download_link: $archive.browser_download_url,
                             hash_sha256: ($archive.digest | ltrimstr("sha256:"))
-                          } + if (($release.body // "") | test("\\S")) then
-                            {changelog: $release.body}
+                          } + if (($release.body_text // "") | test("\\S")) then
+                            {changelog: $release.body_text}
                           else {} end)
                         }
                       }
