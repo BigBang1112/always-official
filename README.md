@@ -1,5 +1,14 @@
 # Always Official
 
+Always Official is a TrackMania United Forever mod that keeps restarting official mode automatically after you jump into it once.
+
+- By default, race is still in offline mode
+- *Restart in Official Mode* starts official mode as usual
+- While in official mode: retire (full respawn) automatically starts official mode again
+- Input presses are carried over, so you dont have to re-press them again
+
+It is the first C# mod integrated with TMF ModLoader (using NativeAOT).
+
 ## Building
 
 Needs the .NET 10 SDK and Visual Studio (or its Build Tools) with "Desktop development with C++".
@@ -36,3 +45,7 @@ dotnet test --project AlwaysOfficial.Tests/AlwaysOfficial.Tests.csproj -c Releas
 Building the tests first publishes the mod twice in the same configuration: the normal build (into `dist\`) and a
 native test build (`-p:NativeTestBuild=true`, into `bin\<Configuration>-NativeTests\`) that adds a test-only export.
 Pass `-p:PublishModForTests=false` to skip this when both are already published.
+
+## License
+
+Licensed under the [MIT License](LICENSE).
