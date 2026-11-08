@@ -19,7 +19,7 @@ ModLoader is the recommended approach, as standalone can potentially collide wit
 
 ### ModLoader
 
-Close the ModLoader, open `%LOCALAPPDATA%\TMLoader\config.yaml` and add one of these URLs under `servers:`. Choose one of these:
+Close the ModLoader, open `%LOCALAPPDATA%\TMLoader\config.yaml` and add one of these URLs under `servers:`. Choose one of these (maybe both will also work):
 
 - `https://bigbang1112.cz/trackmania/tmf/modloader/`
 - `https://bigbang1112.github.io/always-official/modloader/`
