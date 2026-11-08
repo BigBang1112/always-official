@@ -308,7 +308,11 @@ internal static unsafe class RestartInputs
         catch (Exception e)
         {
             Reset();
-            Log.Error("Remembered input disabled", e);
+            try
+            {
+                Log.Error("Remembered input disabled", e);
+            }
+            catch { } // Logging must not escape the native callback
         }
 
         return GameFunctions.SetInputState(store, inputEvent, time);
@@ -337,7 +341,11 @@ internal static unsafe class RestartInputs
         catch (Exception e)
         {
             Reset();
-            Log.Error("Remembered input disabled", e);
+            try
+            {
+                Log.Error("Remembered input disabled", e);
+            }
+            catch { } // Logging must not escape the native callback
         }
 
         return GameFunctions.InsertInputEvent(store, inputEvent, time);
