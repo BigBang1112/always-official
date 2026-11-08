@@ -2,6 +2,11 @@ namespace AlwaysOfficial;
 
 internal sealed class OfficialSession
 {
+    private const int RequestOfficialStatus = 13;
+    private const int RetryChoice = 0x1f;
+    private const int RetryOfficialChoice = 0x6d;
+    private const int RetryCustomOfficialChoice = 0x6e;
+
     private (nint App, nint Race, nint Challenge) observedIdentity;
 
     public bool Armed { get; private set; }
@@ -12,18 +17,20 @@ internal sealed class OfficialSession
     {
         var identity = (app, race, challenge);
 
+        if (app == 0 || race == 0 || challenge == 0)
+        {
+            Reset();
+            observedIdentity = identity;
+            return;
+        }
+
         if (observedIdentity != identity)
         {
             Reset();
             observedIdentity = identity;
         }
 
-        if (app == 0 || race == 0 || challenge == 0)
-        {
-            Reset();
-            return;
-        }
-
+        // Keep activation and custom mode when the game clears its official flag during a retry.
         if (official)
         {
             Armed = true;
@@ -36,12 +43,12 @@ internal sealed class OfficialSession
         if (Armed && status is 3 or 4)
         {
             AutomaticRequest = true;
-            return 13; // CGameRace::EStatus: request an official run
+            return RequestOfficialStatus;
         }
 
         // 15/16 enter the quit/pause dialog
         // choosing Resume must preserve the session
-        if (status is not (0 or 1 or 3 or 4 or 13 or 15 or 16))
+        if (status is not (0 or 1 or 3 or 4 or RequestOfficialStatus or 15 or 16))
         {
             Reset();
         }
@@ -51,15 +58,13 @@ internal sealed class OfficialSession
 
     public int ResultChoice(int choice)
     {
-        if (Armed && choice == 0x1f)
+        if (!Armed || choice != RetryChoice)
         {
-            AutomaticRequest = true;
-
-            // Menu retry (0x1f) becomes official retry (0x6d), or custom official retry (0x6e)
-            return Custom != 0 ? 0x6e : 0x6d;
+            return choice;
         }
 
-        return choice;
+        AutomaticRequest = true;
+        return Custom != 0 ? RetryCustomOfficialChoice : RetryOfficialChoice;
     }
 
     public bool SkipConfirmation(bool allowed)

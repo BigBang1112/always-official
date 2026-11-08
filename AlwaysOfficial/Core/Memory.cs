@@ -4,17 +4,16 @@ internal static unsafe class Memory
 {
 #if NATIVE_TESTS
     internal static nint TestImageBase;
-
-    public static void* Rebase(nuint address)
-    {
-        return (void*)((nuint)(TestImageBase != 0 ? TestImageBase : Win32.GetModuleHandle(null)) - 0x00400000 + address);
-    }
-#else
-    public static void* Rebase(nuint address)
-    {
-        return (void*)((nuint)Win32.GetModuleHandle(null) - 0x00400000 + address);
-    }
 #endif
+    public static void* Rebase(nuint address)
+    {
+#if NATIVE_TESTS
+        var imageBase = TestImageBase != 0 ? TestImageBase : Win32.GetModuleHandle(null);
+#else
+        var imageBase = Win32.GetModuleHandle(null);
+#endif
+        return (void*)((nuint)imageBase - 0x00400000 + address);
+    }
 
     public static bool Readable(void* address, int size)
     {
@@ -40,6 +39,13 @@ internal static unsafe class Memory
 
         value = *(T*)address;
         return true;
+    }
+
+    public static T ReadField<T>(nint obj, int offset) where T : unmanaged
+    {
+        return TryRead((byte*)obj + offset, out T value)
+            ? value
+            : throw new InvalidOperationException("Game object is unreadable");
     }
 
     public static bool WriteCode(byte* address, ReadOnlySpan<byte> bytes)

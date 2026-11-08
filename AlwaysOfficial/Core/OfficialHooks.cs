@@ -13,29 +13,6 @@ internal static unsafe class OfficialHooks
     internal static bool AutomaticInputTransition => !failed && session.AutomaticRequest;
     private static bool failed = true;
 
-    // CTrackManiaRace::Run
-    // yields the race status through the third argument
-    private static delegate* unmanaged[Thiscall]<nint, nint*, int*, int, void> Run =>
-        (delegate* unmanaged[Thiscall]<nint, nint*, int*, int, void>)Memory.Rebase(0x0047af80);
-
-    // CTrackManiaMenus::DialogChallengeResult
-    // writes the menu choice at menus+0x700
-    private static delegate* unmanaged[Thiscall]<nint, nint*, int, void> Result =>
-        (delegate* unmanaged[Thiscall]<nint, nint*, int, void>)Memory.Rebase(0x004d0270);
-
-    // CTrackMania::RequestOfficialRace(context, resetPlayer, custom)
-    // custom selects RequestCustomOfficialRace, otherwise it requests StartOfficialRecord
-    private static delegate* unmanaged[Thiscall]<nint, nint*, int, int, void> Request =>
-        (delegate* unmanaged[Thiscall]<nint, nint*, int, int, void>)Memory.Rebase(0x00490e00);
-
-    // CGameCtnMenus::DialogConfirmOfficial(allowed, cost, balance, title, message)
-    // title/message point to CFastStringInt objects
-    // this function only presents the request UI
-    private static delegate* unmanaged[Thiscall]<nint, int, uint, uint, nint, nint, void> Confirm =>
-        (delegate* unmanaged[Thiscall]<nint, int, uint, uint, nint, nint, void>)Memory.Rebase(0x0062da90);
-
-    private readonly record struct Patch(uint Site, uint Target, nint Detour);
-
     public static bool Install()
     {
         if (sizeof(nint) != 4)
@@ -45,59 +22,28 @@ internal static unsafe class OfficialHooks
 
         // Patch individual CALL sites so unrelated callers retain the game's behavior
         // In particular, only the normal solo Run call is wrapped, not cleanup Run calls
-        Patch[] patches = [
-            new(0x0049cdaf, 0x00491080, (nint)(delegate* unmanaged[Thiscall]<nint, nint*, void>)&ChallengeDetour),
-            new(0x00491bc8, 0x0047af80, (nint)(delegate* unmanaged[Thiscall]<nint, nint*, int*, int, void>)&RunDetour),
-            new(0x0049142e, 0x004d0270, (nint)(delegate* unmanaged[Thiscall]<nint, nint*, int, void>)&ResultDetour),
-            new(0x004914fb, 0x004d0270, (nint)(delegate* unmanaged[Thiscall]<nint, nint*, int, void>)&ResultDetour),
-            new(0x004915d3, 0x00490e00, (nint)(delegate* unmanaged[Thiscall]<nint, nint*, int, int, void>)&RequestDetour),
-            new(0x00491e8b, 0x00490e00, (nint)(delegate* unmanaged[Thiscall]<nint, nint*, int, int, void>)&RequestDetour),
-            new(0x004927c6, 0x00490e00, (nint)(delegate* unmanaged[Thiscall]<nint, nint*, int, int, void>)&RequestDetour),
-            new(0x0048b2ba, 0x0062da90, (nint)(delegate* unmanaged[Thiscall]<nint, int, uint, uint, nint, nint, void>)&ConfirmDetour),
-            new(0x008f914a, 0x008f6f50, (nint)(delegate* unmanaged[Thiscall]<nint, nint, uint, int>)&RestartInputs.SampleDetour),
-            new(0x008fc266, 0x008f6fc0, (nint)(delegate* unmanaged[Thiscall]<nint, nint, uint, int>)&RestartInputs.ButtonEventDetour),
+        CallHook[] patches = [
+            new(0x0049cdaf, GameFunctions.ChallengeMainLoopAddress, (nint)(delegate* unmanaged[Thiscall]<nint, nint*, void>)&ChallengeDetour),
+            new(0x00491bc8, GameFunctions.RunAddress, (nint)(delegate* unmanaged[Thiscall]<nint, nint*, int*, int, void>)&RunDetour),
+            new(0x0049142e, GameFunctions.ChallengeResultAddress, (nint)(delegate* unmanaged[Thiscall]<nint, nint*, int, void>)&ResultDetour),
+            new(0x004914fb, GameFunctions.ChallengeResultAddress, (nint)(delegate* unmanaged[Thiscall]<nint, nint*, int, void>)&ResultDetour),
+            new(0x004915d3, GameFunctions.RequestOfficialRaceAddress, (nint)(delegate* unmanaged[Thiscall]<nint, nint*, int, int, void>)&RequestDetour),
+            new(0x00491e8b, GameFunctions.RequestOfficialRaceAddress, (nint)(delegate* unmanaged[Thiscall]<nint, nint*, int, int, void>)&RequestDetour),
+            new(0x004927c6, GameFunctions.RequestOfficialRaceAddress, (nint)(delegate* unmanaged[Thiscall]<nint, nint*, int, int, void>)&RequestDetour),
+            new(0x0048b2ba, GameFunctions.ConfirmOfficialAddress, (nint)(delegate* unmanaged[Thiscall]<nint, int, uint, uint, nint, nint, void>)&ConfirmDetour),
+            new(0x008f914a, GameFunctions.SetInputStateAddress, (nint)(delegate* unmanaged[Thiscall]<nint, nint, uint, int>)&RestartInputs.SampleDetour),
+            new(0x008fc266, GameFunctions.InsertInputEventAddress, (nint)(delegate* unmanaged[Thiscall]<nint, nint, uint, int>)&RestartInputs.ButtonEventDetour),
         ];
-
-        foreach (var patch in patches)
-        {
-            var site = (byte*)Memory.Rebase(patch.Site);
-
-            if (!Memory.Readable(site, 5) || !CallPatch.Matches(new ReadOnlySpan<byte>(site, 5),
-                    (uint)(nuint)site, (uint)(nuint)Memory.Rebase(patch.Target)))
-            {
-                Log.Write($"Unsupported executable or another mod changed CALL {patch.Site:X8}, no hooks installed.");
-                return false;
-            }
-        }
-
-        var installed = 0;
 
         try
         {
-            foreach (var patch in patches)
+            if (!CallHook.Install(patches))
             {
-                var site = (byte*)Memory.Rebase(patch.Site);
-
-                installed++;
-
-                if (!Memory.WriteCode(site, CallPatch.Encode((uint)(nuint)site, (uint)patch.Detour)))
-                {
-                    throw new InvalidOperationException($"Cannot patch CALL {patch.Site:X8}");
-                }
+                return false;
             }
         }
         catch
         {
-            foreach (var patch in patches.AsSpan(0, installed))
-            {
-                var site = (byte*)Memory.Rebase(patch.Site);
-
-                if (!Memory.WriteCode(site, CallPatch.Encode((uint)(nuint)site, (uint)(nuint)Memory.Rebase(patch.Target))))
-                {
-                    Log.Write($"Failed to restore CALL {patch.Site:X8}, detours remain passive.");
-                }
-            }
-
             failed = true;
             throw;
         }
@@ -109,19 +55,14 @@ internal static unsafe class OfficialHooks
         return true;
     }
 
-    private static T Read<T>(nint obj, int offset) where T : unmanaged
-    {
-        return Memory.TryRead((byte*)obj + offset, out T value) ? value : throw new InvalidOperationException("Game object is unreadable");
-    }
-
     private static void Observe(nint app, nint race)
     {
         // CTrackMania: +0x198 challenge, +0x454 race, +0x268 official active, +0x26c custom official mode
         // Preserve the mode when requesting another run
         currentApp = app;
-        var challenge = Read<nint>(app, 0x198);
+        var challenge = Memory.ReadField<nint>(app, 0x198);
         RestartInputs.Observe(app, race, challenge);
-        session.Observe(app, race, challenge, Read<int>(app, 0x268) != 0, Read<int>(app, 0x26c));
+        session.Observe(app, race, challenge, Memory.ReadField<int>(app, 0x268) != 0, Memory.ReadField<int>(app, 0x26c));
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvThiscall)])]
@@ -135,24 +76,16 @@ internal static unsafe class OfficialHooks
             {
                 if (*context == 0)
                 {
-                    session.Reset();
-                    RestartInputs.Reset();
+                    ResetSession();
                 }
 
-                Observe(app, Read<nint>(app, 0x454));
+                Observe(app, Memory.ReadField<nint>(app, 0x454));
 
                 // ChallengeMainLoop waits at 0x1927 for the pause menu choice
                 // app+0x194 is the menu manager, translate its choice before the game consumes it
-                if (*context != 0 && *context != -1 && Read<int>(*context, 4) == 0x1927)
+                if (*context != 0 && *context != -1 && Memory.ReadField<int>(*context, 4) == 0x1927)
                 {
-                    var menus = Read<nint>(app, 0x194);
-                    var choice = Read<int>(menus, 0x700);
-                    var next = session.ResultChoice(choice);
-
-                    if (choice != next)
-                    {
-                        *(int*)((byte*)menus + 0x700) = next;
-                    }
+                    TranslateRetryChoice(Memory.ReadField<nint>(app, 0x194));
                 }
             }
         }
@@ -161,12 +94,11 @@ internal static unsafe class OfficialHooks
             Fail(e);
         }
 
-        ((delegate* unmanaged[Thiscall]<nint, nint*, void>)Memory.Rebase(0x00491080))(app, context);
+        GameFunctions.ChallengeMainLoop(app, context);
 
         if (*context == -1)
         {
-            session.Reset();
-            RestartInputs.Reset();
+            ResetSession();
         }
     }
 
@@ -177,7 +109,7 @@ internal static unsafe class OfficialHooks
         {
             if (!failed)
             {
-                Observe(Read<nint>(race, 0x18), race);
+                Observe(Memory.ReadField<nint>(race, 0x18), race);
                 RestartInputs.PollKeyboard();
             }
         }
@@ -188,7 +120,7 @@ internal static unsafe class OfficialHooks
 
         // Run copies CGameRace's status at +0x50 to status. OfficialSession changes armed
         // retry statuses 3/4 to 13 so ChallengeMainLoop takes its official-request branch.
-        Run(race, context, status, flags);
+        GameFunctions.Run(race, context, status, flags);
 
         try
         {
@@ -206,13 +138,13 @@ internal static unsafe class OfficialHooks
 
             if (next != *status)
             {
-                RestartInputs.Remember(currentApp, race, Read<nint>(currentApp, 0x198));
+                RestartInputs.Remember(currentApp, race, Memory.ReadField<nint>(currentApp, 0x198));
 
-                if (Read<int>(currentApp, 0x268) != 0)
+                if (Memory.ReadField<int>(currentApp, 0x268) != 0)
                 {
                     // CTrackMania::CancelOfficialRecord -> DoStopOfficialRecord(-2, -2)
                     // stop the previous official recording before starting its replacement
-                    ((delegate* unmanaged[Thiscall]<nint, void>)Memory.Rebase(0x004bcc60))(currentApp);
+                    GameFunctions.CancelOfficialRecord(currentApp);
                 }
 
                 *status = next;
@@ -228,24 +160,18 @@ internal static unsafe class OfficialHooks
     private static void ResultDetour(nint menus, nint* context, int flags)
     {
         // Both result-dialog CALL sites use this hook
-        Result(menus, context, flags);
+        GameFunctions.ChallengeResult(menus, context, flags);
 
         try
         {
-            if (failed || currentApp == 0 || *context != -1 || Read<nint>(currentApp, 0x194) != menus)
+            if (failed || currentApp == 0 || *context != -1 || Memory.ReadField<nint>(currentApp, 0x194) != menus)
             {
                 return;
             }
 
-            Observe(currentApp, Read<nint>(currentApp, 0x454));
+            Observe(currentApp, Memory.ReadField<nint>(currentApp, 0x454));
 
-            var choice = Read<int>(menus, 0x700);
-            var next = session.ResultChoice(choice);
-
-            if (choice != next)
-            {
-                *(int*)((byte*)menus + 0x700) = next;
-            }
+            TranslateRetryChoice(menus);
         }
         catch (Exception e)
         {
@@ -268,7 +194,7 @@ internal static unsafe class OfficialHooks
 
         try
         {
-            Request(app, context, resetPlayer, custom);
+            GameFunctions.RequestOfficialRace(app, context, resetPlayer, custom);
         }
         finally
         {
@@ -280,7 +206,7 @@ internal static unsafe class OfficialHooks
             {
                 // Completion includes denial/failure. Success is the official flag, set by
                 // RequestOfficialRace after PayRequest, together with the custom mode at +0x26c.
-                var official = Read<int>(app, 0x268) != 0;
+                var official = Memory.ReadField<int>(app, 0x268) != 0;
 
                 session.RequestCompleted(official);
 
@@ -316,14 +242,29 @@ internal static unsafe class OfficialHooks
             Fail(e);
         }
 
-        Confirm(menus, allowed, cost, balance, title, message);
+        GameFunctions.ConfirmOfficial(menus, allowed, cost, balance, title, message);
+    }
+
+    private static void TranslateRetryChoice(nint menus)
+    {
+        var choice = Memory.ReadField<int>(menus, 0x700);
+        var next = session.ResultChoice(choice);
+        if (choice != next)
+        {
+            *(int*)((byte*)menus + 0x700) = next;
+        }
+    }
+
+    private static void ResetSession()
+    {
+        session.Reset();
+        RestartInputs.Reset();
     }
 
     private static void Fail(Exception e)
     {
         failed = true;
-        session.Reset();
-        RestartInputs.Reset();
+        ResetSession();
 
         try
         {

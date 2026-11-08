@@ -19,14 +19,9 @@ internal static unsafe class RestartInputs
         public int Value;
     }
 
-    private static T Read<T>(nint obj, int offset) where T : unmanaged
-    {
-        return Memory.TryRead((byte*)obj + offset, out T value) ? value : throw new InvalidOperationException("Input object is unreadable");
-    }
-
     private static nint Action(int button)
     {
-        return Read<nint>((nint)Memory.Rebase(0x00cd3f64), button * 4);
+        return Memory.ReadField<nint>((nint)Memory.Rebase(0x00cd3f64), button * 4);
     }
 
     public static void Reset()
@@ -49,7 +44,7 @@ internal static unsafe class RestartInputs
     {
         Observe(app, race, challenge);
 
-        var port = Read<nint>(race, 0x20);
+        var port = Memory.ReadField<nint>(race, 0x20);
         if (port == 0)
         {
             Reset();
@@ -58,12 +53,10 @@ internal static unsafe class RestartInputs
 
         // CInputPort::GetActionState queries the embedded store at port+0x40 with time -1.
         // Its result is a shared static SInputEvent buffer, so read each value before calling again.
-        var get = (delegate* unmanaged[Thiscall]<nint, nint, nint>)Memory.Rebase(0x008f8160);
+        var accelerate = held.Sample(0, Memory.ReadField<int>(GameFunctions.GetActionState(port, Action(0)), 4)) != 0;
+        var brake = held.Sample(1, Memory.ReadField<int>(GameFunctions.GetActionState(port, Action(1)), 4)) != 0;
 
-        var accelerate = held.Sample(0, Read<int>(get(port, Action(0)), 4)) != 0;
-        var brake = held.Sample(1, Read<int>(get(port, Action(1)), 4)) != 0;
-
-        inputOwner = (app, race, challenge, port, Read<nint>(race, 0xc8));
+        inputOwner = (app, race, challenge, port, Memory.ReadField<nint>(race, 0xc8));
         held.Remember(accelerate, brake);
 
         RememberKeyboardKeys();
@@ -87,20 +80,20 @@ internal static unsafe class RestartInputs
         keyboardKeys[0].Clear();
         keyboardKeys[1].Clear();
 
-        var count = Read<uint>(inputOwner.Map, 0x2c);
+        var count = Memory.ReadField<uint>(inputOwner.Map, 0x2c);
 
         if (count > 4096)
         {
             throw new InvalidOperationException("Unexpected input binding count");
         }
 
-        var bindings = Read<nint>(inputOwner.Map, 0x30);
-        var deviceCount = Read<uint>(inputOwner.Port, 0x2c);
-        var devices = Read<nint>(inputOwner.Port, 0x30);
+        var bindings = Memory.ReadField<nint>(inputOwner.Map, 0x30);
+        var deviceCount = Memory.ReadField<uint>(inputOwner.Port, 0x2c);
+        var devices = Memory.ReadField<nint>(inputOwner.Port, 0x30);
 
         for (uint i = 0; i < count; i++)
         {
-            var action = Read<nint>(bindings, (int)i * 8);
+            var action = Memory.ReadField<nint>(bindings, (int)i * 8);
             var button = action == Action(0) ? 0 : action == Action(1) ? 1 : -1;
 
             if (button < 0 || (held.Mask & (1 << button)) == 0)
@@ -115,15 +108,15 @@ internal static unsafe class RestartInputs
                 continue;
             }
 
-            var device = Read<nint>(devices, index * 4);
-            var vtable = Read<nint>(device, 0);
+            var device = Memory.ReadField<nint>(devices, index * 4);
+            var vtable = Memory.ReadField<nint>(device, 0);
 
-            if (((delegate* unmanaged[Thiscall]<nint, int>)Read<nint>(vtable, 0x78))(device) != 0)
+            if (((delegate* unmanaged[Thiscall]<nint, int>)Memory.ReadField<nint>(vtable, 0x78))(device) != 0)
             {
                 continue;
             }
 
-            var obj = Read<uint>(bindings, (int)i * 8 + 4);
+            var obj = Memory.ReadField<uint>(bindings, (int)i * 8 + 4);
 
             if (obj >= 0x90)
             {
@@ -131,7 +124,7 @@ internal static unsafe class RestartInputs
             }
 
             // Keyboard objects use this game's DIK table, not Windows virtual key indices
-            var scan = Read<uint>((nint)Memory.Rebase(0x00d219e0), (int)obj * 0x20c);
+            var scan = Memory.ReadField<uint>((nint)Memory.Rebase(0x00d219e0), (int)obj * 0x20c);
 
             if ((scan & 0x80) != 0)
             {
@@ -179,9 +172,9 @@ internal static unsafe class RestartInputs
 
             // The buffered key-up may have been discarded during countdown
             // Clear the actual port state too, at the same simulation tick InputRace will query
-            var core = Read<nint>((nint)Memory.Rebase(0x00d731e0), 0);
-            var timer = Read<nint>(core, 0x14);
-            var tick = Read<uint>(timer != 0 ? timer : core + 0xa0, 0x1c);
+            var core = Memory.ReadField<nint>((nint)Memory.Rebase(0x00d731e0), 0);
+            var timer = Memory.ReadField<nint>(core, 0x14);
+            var tick = Memory.ReadField<uint>(timer != 0 ? timer : core + 0xa0, 0x1c);
             InputEvent released = new()
             {
                 Action = Action(button),
@@ -190,7 +183,7 @@ internal static unsafe class RestartInputs
 
             // CInputEventsStore::SetState inserts only when the converted value differs
             // from the stored state at this time. Inject into the same store as the sampler.
-            ((delegate* unmanaged[Thiscall]<nint, nint, uint, int>)Memory.Rebase(0x008f6f50))(inputOwner.Port + 0x40, (nint)(&released), tick);
+            GameFunctions.SetInputState(inputOwner.Port + 0x40, (nint)(&released), tick);
             Log.Write($"Remembered {(button == 0 ? "accelerator" : "brake")} released by keyboard state.");
         }
     }
@@ -202,11 +195,11 @@ internal static unsafe class RestartInputs
             return false;
         }
 
-        if (!OfficialHooks.InputsEnabled || Read<nint>(inputOwner.App, 0x454) != inputOwner.Race ||
-            Read<nint>(inputOwner.App, 0x198) != inputOwner.Challenge || Read<nint>(inputOwner.Race, 0x20) != inputOwner.Port ||
-            (Read<int>(inputOwner.Port, 0x90) == 0 && Read<int>(inputOwner.Port, 0x98) == 0) ||
-            (!OfficialHooks.AutomaticInputTransition && (Read<int>(inputOwner.Race, 0x48) != 0 ||
-                Read<nint>(inputOwner.Port, 0x20) != inputOwner.Map)))
+        if (!OfficialHooks.InputsEnabled || Memory.ReadField<nint>(inputOwner.App, 0x454) != inputOwner.Race ||
+            Memory.ReadField<nint>(inputOwner.App, 0x198) != inputOwner.Challenge || Memory.ReadField<nint>(inputOwner.Race, 0x20) != inputOwner.Port ||
+            (Memory.ReadField<int>(inputOwner.Port, 0x90) == 0 && Memory.ReadField<int>(inputOwner.Port, 0x98) == 0) ||
+            (!OfficialHooks.AutomaticInputTransition && (Memory.ReadField<int>(inputOwner.Race, 0x48) != 0 ||
+                Memory.ReadField<nint>(inputOwner.Port, 0x20) != inputOwner.Map)))
         {
             Reset();
             return false;
@@ -217,18 +210,18 @@ internal static unsafe class RestartInputs
 
     private static int DeviceFor(nint map, uint binding)
     {
-        var count = Read<uint>(map, 0x20);
+        var count = Memory.ReadField<uint>(map, 0x20);
 
         if (count > 64)
         {
             throw new InvalidOperationException("Unexpected input device count");
         }
 
-        var cats = Read<nint>(map, 0x24);
+        var categories = Memory.ReadField<nint>(map, 0x24);
 
         for (var i = 0; i < count; i++)
         {
-            if (binding < Read<uint>(cats, i * 8) + Read<uint>(cats, i * 8 + 4))
+            if (binding < Memory.ReadField<uint>(categories, i * 8) + Memory.ReadField<uint>(categories, i * 8 + 4))
             {
                 return i;
             }
@@ -244,25 +237,25 @@ internal static unsafe class RestartInputs
             return true;
         }
 
-        var map = Read<nint>(inputOwner.Port, 0x20);
+        var map = Memory.ReadField<nint>(inputOwner.Port, 0x20);
 
         if (map == 0 || map == inputOwner.Map)
         {
             return false;
         }
 
-        uint count = Read<uint>(map, 0x2c), originalCount = Read<uint>(inputOwner.Map, 0x2c);
+        uint count = Memory.ReadField<uint>(map, 0x2c), originalCount = Memory.ReadField<uint>(inputOwner.Map, 0x2c);
 
         if (count > 4096 || originalCount > 4096)
         {
             throw new InvalidOperationException("Unexpected input binding count");
         }
 
-        nint bindings = Read<nint>(map, 0x30), original = Read<nint>(inputOwner.Map, 0x30);
+        nint bindings = Memory.ReadField<nint>(map, 0x30), original = Memory.ReadField<nint>(inputOwner.Map, 0x30);
 
         for (uint i = 0; i < count; i++)
         {
-            if (Read<nint>(bindings, (int)i * 8) != action)
+            if (Memory.ReadField<nint>(bindings, (int)i * 8) != action)
             {
                 continue;
             }
@@ -274,12 +267,12 @@ internal static unsafe class RestartInputs
                 continue;
             }
 
-            var obj = Read<uint>(bindings, (int)i * 8 + 4);
+            var obj = Memory.ReadField<uint>(bindings, (int)i * 8 + 4);
 
             for (uint j = 0; j < originalCount; j++)
             {
-                if (Read<nint>(original, (int)j * 8) == Action(button) &&
-                    Read<uint>(original, (int)j * 8 + 4) == obj && DeviceFor(inputOwner.Map, j) == device)
+                if (Memory.ReadField<nint>(original, (int)j * 8) == Action(button) &&
+                    Memory.ReadField<uint>(original, (int)j * 8 + 4) == obj && DeviceFor(inputOwner.Map, j) == device)
                 {
                     return true;
                 }
@@ -300,14 +293,14 @@ internal static unsafe class RestartInputs
 
             if (Owns(store))
             {
-                var value = Read<InputEvent>(inputEvent, 0);
+                var value = Memory.ReadField<InputEvent>(inputEvent, 0);
 
                 for (var i = 0; i < 2; i++)
                 {
                     if (value.Action == Action(i))
                     {
                         value.Value = held.Sample(i, value.Value);
-                        return ((delegate* unmanaged[Thiscall]<nint, nint, uint, int>)Memory.Rebase(0x008f6f50))(store, (nint)(&value), time);
+                        return GameFunctions.SetInputState(store, (nint)(&value), time);
                     }
                 }
             }
@@ -318,7 +311,7 @@ internal static unsafe class RestartInputs
             Log.Error("Remembered input disabled", e);
         }
 
-        return ((delegate* unmanaged[Thiscall]<nint, nint, uint, int>)Memory.Rebase(0x008f6f50))(store, inputEvent, time);
+        return GameFunctions.SetInputState(store, inputEvent, time);
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvThiscall)])]
@@ -330,11 +323,11 @@ internal static unsafe class RestartInputs
         try
         {
             // This CALL is in DirectInput's buffered-event path, not ClearInputs sampler
-            if (Owns(store) && Read<int>(inputEvent, 4) == 0)
+            if (Owns(store) && Memory.ReadField<int>(inputEvent, 4) == 0)
             {
                 for (var i = 0; i < 2; i++)
                 {
-                    if (IsReleaseFor(Read<nint>(inputEvent, 0), i))
+                    if (IsReleaseFor(Memory.ReadField<nint>(inputEvent, 0), i))
                     {
                         held.Release(i);
                     }
@@ -347,6 +340,6 @@ internal static unsafe class RestartInputs
             Log.Error("Remembered input disabled", e);
         }
 
-        return ((delegate* unmanaged[Thiscall]<nint, nint, uint, int>)Memory.Rebase(0x008f6fc0))(store, inputEvent, time);
+        return GameFunctions.InsertInputEvent(store, inputEvent, time);
     }
 }
