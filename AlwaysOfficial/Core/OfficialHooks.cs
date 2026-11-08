@@ -7,6 +7,7 @@ internal static unsafe class OfficialHooks
 {
     private static readonly OfficialSession session = new();
     private static nint currentApp;
+    internal static nint CurrentRace => failed || currentApp == 0 ? 0 : Memory.ReadField<nint>(currentApp, 0x454);
 
     [ThreadStatic] private static bool insideOfficialRequest;
     internal static bool InputsEnabled => !failed && session.Armed;
@@ -37,7 +38,8 @@ internal static unsafe class OfficialHooks
             new(0x005e0cd3, GameFunctions.GhostDestroyAddress, (nint)(delegate* unmanaged[Thiscall]<nint, void>)&ReplayMetadata.DestroyDetour),
             new(0x009242f2, GameFunctions.WriteArchiveMaskAddress, ReplayMetadata.ArchiveThunk),
             new(0x0047dc30, GameFunctions.StartOfficialRecordAddress, (nint)(delegate* unmanaged[Thiscall]<nint, void>)&ReplayMetadata.StartOfficialDetour),
-            new(0x00480e7f, GameFunctions.StopOfficialRecordAddress, (nint)(delegate* unmanaged[Thiscall]<nint, nint, void>)&ReplayMetadata.StopOfficialDetour),
+            new(0x0047c2c6, GameFunctions.ChangeRaceStateAddress, (nint)(delegate* unmanaged[Thiscall]<nint, uint, int, void>)&ReplayMetadata.RaceStateDetour),
+            new(0x00480e8f, GameFunctions.ChangeRaceStateAddress, (nint)(delegate* unmanaged[Thiscall]<nint, uint, int, void>)&ReplayMetadata.RaceStateDetour),
         ];
 
         try
@@ -141,12 +143,6 @@ internal static unsafe class OfficialHooks
                 RestartInputs.Reset();
             }
 
-            // A normal frame or pause/resume does not end an offline recording
-            if (*status is not (0 or 15 or 16))
-            {
-                ReplayMetadata.EndRun();
-            }
-
             if (next != *status)
             {
                 RestartInputs.Remember(currentApp, race, Memory.ReadField<nint>(currentApp, 0x198));
@@ -160,6 +156,11 @@ internal static unsafe class OfficialHooks
                 }
 
                 *status = next;
+            }
+            else if (*status is not (0 or 15 or 16))
+            {
+                // A normal frame or pause/resume does not end the metadata session.
+                ReplayMetadata.EndRun();
             }
         }
         catch (Exception e)
@@ -277,6 +278,7 @@ internal static unsafe class OfficialHooks
     private static void ResetSession()
     {
         session.Reset();
+        currentApp = 0;
         RestartInputs.Reset();
         ReplayMetadata.EndRun();
     }

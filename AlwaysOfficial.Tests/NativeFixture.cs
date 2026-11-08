@@ -27,9 +27,6 @@ internal static unsafe partial class NativeFixture
     private static int ghostStarts;
     private static int ghostDestructions;
     private static int officialStarts;
-    private static int officialStops;
-    private static long officialBefore;
-    private static long officialAfter;
     private static readonly int[] cachedValues = new int[7];
     private static readonly List<(nint Action, int Value, uint Time)> inputEvents = [];
     private static readonly (uint Site, uint Target)[] calls =
@@ -39,7 +36,8 @@ internal static unsafe partial class NativeFixture
         (0x4927c6, 0x490e00), (0x48b2ba, 0x62da90),
         (0x8f914a, 0x8f6f50), (0x8fc266, 0x8f6fc0),
         (0x5dd61f, 0x5dfe90), (0x5e0cd3, 0x5e0250), (0x9242f2, 0x909e60),
-        (0x47dc30, 0x4bbb70), (0x480e7f, 0x4bcc70),
+        (0x47dc30, 0x4bbb70),
+        (0x47c2c6, 0x4ae9d0), (0x480e8f, 0x4ae9d0),
     ];
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
@@ -149,8 +147,9 @@ internal static unsafe partial class NativeFixture
         Branch(0x5e0250, (nint)(delegate* unmanaged[Thiscall]<nint, void>)&FakeGhostDestroy, 0xe9);
         Branch(0x909e60, (nint)(delegate* unmanaged[Thiscall]<nint, uint*, uint, void>)&FakeWriteMask, 0xe9);
         Branch(0x909a60, (nint)(delegate* unmanaged[Thiscall]<nint, byte*, uint, void>)&FakeWriteData, 0xe9);
+        Branch(0x4ae9d0, (nint)(delegate* unmanaged[Thiscall]<nint, uint, int, void>)&FakeRaceState, 0xe9);
+        Branch(0x5ddb50, (nint)(delegate* unmanaged[Thiscall]<nint, nint>)&FakeLocalPlayerInfo, 0xe9);
         Branch(0x4bbb70, (nint)(delegate* unmanaged[Thiscall]<nint, void>)&FakeOfficialStart, 0xe9);
-        Branch(0x4bcc70, (nint)(delegate* unmanaged[Thiscall]<nint, nint, void>)&FakeOfficialStop, 0xe9);
         for (var i = 0; i < 6; i++)
         {
             Field<nint>(At(0xcd3f64), i * 4) = (nint)NativeMemory.AllocZeroed(0x14);
@@ -209,23 +208,26 @@ internal static unsafe partial class NativeFixture
         var status = 0;
         request(currentApp, &context, 0, 0);
         var manualGhost = recordedGhost;
+        run(gameRace, &context, &status, 0);
+        Transition(1);
+        Transition(2);
         EmitButton(0, true);
         EmitButton(1, true);
         raceStatus = 3;
         run(gameRace, &context, &status, 0);
         request(currentApp, &context, 0, 0);
         var retryGhost = recordedGhost;
-        officialBefore = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         ((delegate* unmanaged[Thiscall]<nint, void>)Target(0x47dc30))(currentApp);
         // The game may replace a recording during the same reset. Preserve the run's
         // provenance even when the reset samples preceded creation of its final ghost.
         var replacementGhost = (nint)NativeMemory.AllocZeroed(0x198);
         ((delegate* unmanaged[Thiscall]<nint, nint, uint, void>)Target(0x5dd61f))(replacementGhost, 1, 0);
+        Field<int>(gameRace, 0x314) = 0;
+        Transition(1);
+        Transition(2);
         EmitButton(0, false);
         EmitButton(1, false);
-        ((delegate* unmanaged[Thiscall]<nint, nint, void>)Target(0x480e7f))(currentApp, gameRace);
-        officialAfter = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        Check(officialStarts == 1 && officialStops == 1, "Official callbacks did not forward their arguments");
+        Check(officialStarts == 1, "Official start did not forward its argument");
         raceStatus = 0;
         run(gameRace, &context, &status, 0);
         context = 0;
@@ -242,9 +244,13 @@ internal static unsafe partial class NativeFixture
         Check(FlushInstructionCache(GetCurrentProcess(), At(0x9242e1), 26), "Cannot flush archive helper");
         var archive = (nint)NativeMemory.AllocZeroed(0x20);
         Field<int>(archive, 8) = 1;
-        CheckMetadata(archive, retryGhost, 3, true);
-        CheckMetadata(archive, replacementGhost, 3, true);
-        CheckMetadata(archive, manualGhost, 0);
+        var otherPlayer = (nint)NativeMemory.AllocZeroed(0x318);
+        ((delegate* unmanaged[Thiscall]<nint, uint, int, void>)Target(0x47c2c6))(otherPlayer, 123, 1);
+        ((delegate* unmanaged[Thiscall]<nint, uint, int, void>)Target(0x480e8f))(otherPlayer, 123, 2);
+        CheckMetadata(archive, recordedGhost, 0); // Other players must not supply our Go/finish times.
+        CheckMetadata(archive, retryGhost, 3, true, finished: true);
+        CheckMetadata(archive, replacementGhost, 3, true, finished: true);
+        CheckMetadata(archive, manualGhost, 0, finished: true);
         CheckMetadata(archive, recordedGhost, 0);
 
         CheckArchiveUnchanged(archive, (nint)0x123456); // Untracked or loaded nodes.
@@ -262,6 +268,22 @@ internal static unsafe partial class NativeFixture
         CheckMetadata(archive, retryGhost, 0);
     }
 
+    private static void Transition(int state)
+    {
+        var site = state == 1 ? 0x47c2c6u : 0x480e8fu;
+        ((delegate* unmanaged[Thiscall]<nint, uint, int, void>)Target(site))(gameRace, 123, state);
+        Check(Field<int>(gameRace, 0x314) == state, "Race state was not forwarded");
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvThiscall)])]
+    private static void FakeRaceState(nint player, uint time, int state)
+    {
+        Field<int>(player, 0x314) = state;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvThiscall)])]
+    private static nint FakeLocalPlayerInfo(nint race) => race == gameRace ? gameRace : 0;
+
     private static void ArchiveNode(nint archive, nint node)
     {
         archiveBytes.Clear();
@@ -269,7 +291,7 @@ internal static unsafe partial class NativeFixture
         ((delegate* unmanaged[Thiscall]<nint, nint, uint*, uint, void>)At(0x9242e1))(archive, node, &end, 1);
     }
 
-    private static void CheckMetadata(nint archive, nint ghost, byte expectedFlags, bool timestamps = false)
+    private static void CheckMetadata(nint archive, nint ghost, byte expectedFlags, bool official = false, bool finished = false)
     {
         ArchiveNode(archive, ghost);
         using var reader = new BinaryReader(new MemoryStream(archiveBytes.ToArray()));
@@ -279,8 +301,8 @@ internal static unsafe partial class NativeFixture
         var payloadEnd = reader.BaseStream.Position + length;
         Check(reader.ReadByte() == 0, "Wrong metadata format version");
         var flags = reader.ReadByte();
-        Check((flags & 3) == expectedFlags && (flags & 0xc0) == 0, "Carried-input provenance changed");
-        Check((flags & 0x30) == (timestamps ? 0x30 : 0), "Timestamp presence changed");
+        Check((flags & 3) == expectedFlags && (flags & 0xe0) == 0, "Carried-input provenance changed");
+        Check((flags & 16) == (official ? 16 : 0), "Official mode changed");
         var libraryVersion = System.Diagnostics.FileVersionInfo.GetVersionInfo(NativeTestDll);
         Check(reader.Read7BitEncodedInt() == libraryVersion.FileMajorPart, "Wrong major version");
         Check(reader.Read7BitEncodedInt() == libraryVersion.FileMinorPart, "Wrong minor version");
@@ -292,16 +314,11 @@ internal static unsafe partial class NativeFixture
         var expectedCommit = commit.Length == 40 ? commit : new string('0', 40);
         Check(Convert.ToHexString(reader.ReadBytes(20)).Equals(expectedCommit, StringComparison.OrdinalIgnoreCase),
             "Wrong Git commit");
-        var runStartedAt = reader.Read7BitEncodedInt64();
-        var runEndedAt = (flags & 8) != 0 ? reader.Read7BitEncodedInt64() : 0;
-        Check(runStartedAt > 0 && (runEndedAt == 0 || runEndedAt >= runStartedAt), "Wrong run timestamps");
-        if (timestamps)
-        {
-            var startedAt = reader.Read7BitEncodedInt64();
-            var stoppedAt = reader.Read7BitEncodedInt64();
-            Check(startedAt >= officialBefore && startedAt <= officialAfter &&
-                stoppedAt >= startedAt && stoppedAt <= officialAfter, "Wrong official-call timestamps");
-        }
+        var startedAt = reader.Read7BitEncodedInt64();
+        var stoppedAt = (flags & 8) != 0 ? reader.Read7BitEncodedInt64() : 0;
+        Check(((flags & 8) != 0) == finished, "Finish timestamp presence changed");
+        Check((startedAt != 0) == finished, "Go timestamp presence changed");
+        Check(startedAt >= 0 && (stoppedAt == 0 || (startedAt > 0 && stoppedAt >= startedAt)), "Wrong run timestamps");
         Check(reader.BaseStream.Position == payloadEnd, "Incorrect payload length");
         // An unknown-chunk reader skips exactly this length and must land on the node terminator.
         reader.BaseStream.Position = payloadEnd;
@@ -327,15 +344,6 @@ internal static unsafe partial class NativeFixture
         if (app == currentApp)
         {
             officialStarts++;
-        }
-    }
-
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvThiscall)])]
-    private static void FakeOfficialStop(nint app, nint player)
-    {
-        if (app == currentApp && player == gameRace)
-        {
-            officialStops++;
         }
     }
 

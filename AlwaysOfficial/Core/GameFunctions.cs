@@ -4,15 +4,19 @@ internal static unsafe class GameFunctions
 {
     internal const uint GhostStartRecordAddress = 0x005dfe90;
     internal const uint StartOfficialRecordAddress = 0x004bbb70;
-    internal const uint StopOfficialRecordAddress = 0x004bcc70;
     internal const uint GhostDestroyAddress = 0x005e0250;
     internal const uint WriteArchiveMaskAddress = 0x00909e60;
     internal const uint WriteArchiveDataAddress = 0x00909a60;
+    internal const uint ChangeRaceStateAddress = 0x004ae9d0;
+    internal const uint GetLocalPlayerInfoAddress = 0x005ddb50;
+
+    public static delegate* unmanaged[Thiscall]<nint, uint, int, void> ChangeRaceState =>
+        (delegate* unmanaged[Thiscall]<nint, uint, int, void>)Memory.Rebase(ChangeRaceStateAddress);
+    public static delegate* unmanaged[Thiscall]<nint, nint> GetLocalPlayerInfo =>
+        (delegate* unmanaged[Thiscall]<nint, nint>)Memory.Rebase(GetLocalPlayerInfoAddress);
 
     public static delegate* unmanaged[Thiscall]<nint, void> StartOfficialRecord =>
         (delegate* unmanaged[Thiscall]<nint, void>)Memory.Rebase(StartOfficialRecordAddress);
-    public static delegate* unmanaged[Thiscall]<nint, nint, void> StopOfficialRecord =>
-        (delegate* unmanaged[Thiscall]<nint, nint, void>)Memory.Rebase(StopOfficialRecordAddress);
 
     public static delegate* unmanaged[Thiscall]<nint, nint, uint, void> GhostStartRecord =>
         (delegate* unmanaged[Thiscall]<nint, nint, uint, void>)Memory.Rebase(GhostStartRecordAddress);

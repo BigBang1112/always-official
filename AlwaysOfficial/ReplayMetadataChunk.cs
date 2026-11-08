@@ -5,11 +5,11 @@ namespace AlwaysOfficial;
 internal static class ReplayMetadataChunk
 {
     public const uint Id = 0xBB111201;
-    public const int MaxSize = 82;
+    public const int MaxSize = 64;
 
     public static int Encode(Span<byte> destination, Version version, byte carriedInputs,
-        long? startedAt = null, long? stoppedAt = null, ReadOnlySpan<byte> gitCommit = default,
-        long runStartedAt = 0, long runEndedAt = 0)
+        ReadOnlySpan<byte> gitCommit = default, long startedAt = 0, long stoppedAt = 0,
+        bool official = false)
     {
         if (!gitCommit.IsEmpty && gitCommit.Length != 20)
         {
@@ -24,7 +24,7 @@ internal static class ReplayMetadataChunk
 
         destination[offset++] = 0;
         destination[offset++] = (byte)((carriedInputs & 3) | (revision != 0 ? 4 : 0) |
-            (runEndedAt != 0 ? 8 : 0) | (startedAt.HasValue ? 16 : 0) | (stoppedAt.HasValue ? 32 : 0));
+            (stoppedAt != 0 ? 8 : 0) | (official ? 16 : 0));
 
         WriteVersion(destination, ref offset, version.Major);
         WriteVersion(destination, ref offset, version.Minor);
@@ -40,21 +40,11 @@ internal static class ReplayMetadataChunk
 
         offset += 20;
 
-        WriteTimestamp(destination, ref offset, runStartedAt);
+        WriteTimestamp(destination, ref offset, startedAt);
 
-        if (runEndedAt != 0)
+        if (stoppedAt != 0)
         {
-            WriteTimestamp(destination, ref offset, runEndedAt);
-        }
-
-        if (startedAt.HasValue)
-        {
-            WriteTimestamp(destination, ref offset, startedAt.Value);
-        }
-
-        if (stoppedAt.HasValue)
-        {
-            WriteTimestamp(destination, ref offset, stoppedAt.Value);
+            WriteTimestamp(destination, ref offset, stoppedAt);
         }
 
         BinaryPrimitives.WriteUInt32LittleEndian(destination[8..], (uint)(offset - 12));

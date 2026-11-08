@@ -24,7 +24,7 @@ internal static unsafe class ReplayMetadata
     {
         lock (gate)
         {
-            session.BeginRetry(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            session.BeginRetry();
         }
     }
 
@@ -32,7 +32,7 @@ internal static unsafe class ReplayMetadata
     {
         lock (gate)
         {
-            session.EndRun(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            session.EndRun();
         }
     }
 
@@ -52,7 +52,7 @@ internal static unsafe class ReplayMetadata
         {
             lock (gate)
             {
-                session.StartRecord(ghost, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+                session.StartRecord(ghost);
             }
         }
         catch { } // Metadata must not prevent the game from starting a recording
@@ -63,36 +63,45 @@ internal static unsafe class ReplayMetadata
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvThiscall)])]
     internal static void StartOfficialDetour(nint app)
     {
-        StampOfficial(true);
+        try
+        {
+            lock (gate)
+            {
+                session.StartOfficial();
+            }
+        }
+        catch { } // Metadata must not interrupt official recording
+
         GameFunctions.StartOfficialRecord(app);
     }
 
+    // These CALL sites are the Go transition and the accepted final finish
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvThiscall)])]
-    internal static void StopOfficialDetour(nint app, nint player)
-    {
-        StampOfficial(false);
-        GameFunctions.StopOfficialRecord(app, player);
-    }
-
-    private static void StampOfficial(bool start)
+    internal static void RaceStateDetour(nint player, uint time, int state)
     {
         try
         {
             var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
-            lock (gate)
+            var race = OfficialHooks.CurrentRace;
+            if (race != 0 && player == GameFunctions.GetLocalPlayerInfo(race))
             {
-                if (start)
+                var previous = Memory.ReadField<int>(player, 0x314);
+                lock (gate)
                 {
-                    session.StartOfficial(timestamp);
-                }
-                else
-                {
-                    session.StopOfficial(timestamp);
+                    if (previous == 0 && state == 1)
+                    {
+                        session.Start(timestamp);
+                    }
+                    else if (previous == 1 && state == 2)
+                    {
+                        session.Stop(timestamp);
+                    }
                 }
             }
         }
-        catch { } // Timestamp collection must not interrupt official recording
+        catch { } // Metadata must not interrupt a gameplay transition
+
+        GameFunctions.ChangeRaceState(player, time, state);
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvThiscall)])]
@@ -119,7 +128,7 @@ internal static unsafe class ReplayMetadata
 
         try
         {
-            if (count == 1 && *values == 0xfacade01 &&
+            if (count == 1 && *values == 0xFACADE01 &&
                 Memory.ReadField<int>(archive, 8) != 0 && Memory.ReadField<int>(archive, 12) == 0)
             {
                 lock (gate)

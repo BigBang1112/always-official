@@ -3,17 +3,26 @@ namespace AlwaysOfficial.Tests;
 public class ReplayMetadataSessionTests
 {
     [Test]
-    public async Task OfflineRunEndsOnceAndNextRecordingGetsItsOwnTimestamps()
+    public async Task TimestampsCaptureOnlyGoAndFinish()
     {
         var session = new ReplayMetadataSession();
-        session.StartRecord(1, 100);
+        session.StartRecord(1);
+        await Assert.That(ReadRunTimes(Encode(session, 1))).IsEqualTo((0L, 0L));
+        session.Start(100);
+        session.Start(150);
         await Assert.That(ReadRunTimes(Encode(session, 1))).IsEqualTo((100L, 0L));
-        session.StartRecord(2, 200);
+        session.Stop(200);
+        session.Stop(250);
+        session.EndRun();
         await Assert.That(ReadRunTimes(Encode(session, 1))).IsEqualTo((100L, 200L));
-        session.EndRun(300);
-        session.EndRun(400);
-        await Assert.That(ReadRunTimes(Encode(session, 2))).IsEqualTo((200L, 300L));
-        await Assert.That(Encode(session, 2)[13]).IsEqualTo((byte)8);
+        session.StartRecord(2);
+        session.Start(300);
+        session.BeginRetry();
+        await Assert.That(ReadRunTimes(Encode(session, 2))).IsEqualTo((300L, 0L));
+        session.StartRecord(3);
+        session.Stop(400);
+        session.EndRun();
+        await Assert.That(ReadRunTimes(Encode(session, 3))).IsEqualTo((0L, 0L));
     }
 
     private static (long Start, long End) ReadRunTimes(byte[] bytes)
@@ -27,21 +36,24 @@ public class ReplayMetadataSessionTests
     public async Task ReplacementGhostSharesRunButLaterRetryDoesNotChangeSavedMetadata()
     {
         var session = new ReplayMetadataSession();
-        session.BeginRetry(10);
+        session.BeginRetry();
         session.Carried(0);
-        session.StartRecord(1, 20);
-        session.StartOfficial(100);
-        session.StartRecord(2, 30);
+        session.StartRecord(1);
+        session.Start(100);
+        session.StartOfficial();
+        session.StartRecord(2);
         session.Carried(1);
-        session.StopOfficial(200);
-        session.EndRun(250);
+        session.Stop(200);
+        session.EndRun();
         var first = Encode(session, 1);
         await Assert.That(Convert.ToHexString(Encode(session, 2))).IsEqualTo(Convert.ToHexString(first));
-        await Assert.That(first[13]).IsEqualTo((byte)59);
+        await Assert.That(first[13]).IsEqualTo((byte)27);
 
-        session.BeginRetry(10);
-        session.StartRecord(3, 40);
-        session.StartOfficial(300);
+        session.BeginRetry();
+        session.StartRecord(3);
+        await Assert.That(Encode(session, 3)[13]).IsEqualTo((byte)0);
+        session.Start(100);
+        session.StartOfficial();
         await Assert.That(Convert.ToHexString(Encode(session, 1))).IsEqualTo(Convert.ToHexString(first));
         await Assert.That(Encode(session, 3)[13]).IsEqualTo((byte)16);
     }
@@ -50,15 +62,15 @@ public class ReplayMetadataSessionTests
     public async Task DestroyedGhostLosesMetadataAndReusedAddressStartsFresh()
     {
         var session = new ReplayMetadataSession();
-        session.BeginRetry(10);
-        session.StartRecord(1, 20);
+        session.BeginRetry();
+        session.StartRecord(1);
         session.Carried(0);
         session.Destroy(1);
         await Assert.That(Encode(session, 1).Length).IsEqualTo(0);
 
-        session.EndRun(400);
+        session.EndRun();
         session.Carried(1);
-        session.StartRecord(1, 20);
+        session.StartRecord(1);
         await Assert.That(Encode(session, 1)[13]).IsEqualTo((byte)0);
     }
 
