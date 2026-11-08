@@ -35,9 +35,7 @@ dotnet publish AlwaysOfficial -c Release [-o <dir>]
 ```
 
 - `AlwaysOfficial\bin\Release\net10.0\win-x86\publish\` (or `<dir>`): `AlwaysOfficial.dll` and `d3d9.dll`, with PDBs.
-- `dist\`: the same DLLs and the two packages:
-  - `AlwaysOfficial-modloader.zip`: `AlwaysOfficial.dll` for the TrackMania ModLoader.
-  - `AlwaysOfficial-standalone.zip`: `d3d9.dll` (loader) and `AlwaysOfficial.dll`, to place next to `TmForever.exe`.
+- `dist\`: the same DLLs and `AlwaysOfficial-standalone.zip`, containing `d3d9.dll` (loader) and `AlwaysOfficial.dll` to place next to `TmForever.exe`.
 
 ## Debugging in VS Code
 

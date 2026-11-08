@@ -15,89 +15,32 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - name: Build and package x86 plugin (ModLoader and standalone)
-        shell: pwsh
-        run: |
-          $versionArguments = @()
-          if ($env:GITHUB_REF -like 'refs/tags/v*') {
-            $version = $env:GITHUB_REF_NAME.Substring(1)
-            if ($version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$') {
-              throw "Expected a version tag such as v0.1.0 or v0.2.0-beta.1"
-            }
-            $versionArguments = @("-p:Version=$version")
-          }
-          dotnet publish AlwaysOfficial/AlwaysOfficial.csproj -c Release @versionArguments
-          if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed ($LASTEXITCODE)" }
-          if ($versionArguments) {
-            $actual = (Get-Item dist/AlwaysOfficial.dll).VersionInfo.ProductVersion -replace '\+.*$', ''
-            if ($actual -ne $version) { throw "DLL version '$actual' does not match tag '$version'" }
-          }
+
       - name: Test
-        shell: pwsh
-        run: |
-          # The same hooks with one test-only image-base export, in its own bin/obj folders (outside dist/).
-          dotnet publish AlwaysOfficial/AlwaysOfficial.csproj -c Release -p:NativeTestBuild=true
-          if ($LASTEXITCODE -ne 0) { throw "native test DLL build failed ($LASTEXITCODE)" }
-          # Both DLLs are published above; republishing would overwrite the versioned dist/ files.
-          dotnet test --project AlwaysOfficial.Tests/AlwaysOfficial.Tests.csproj -c Release -p:PublishModForTests=false
-          if ($LASTEXITCODE -ne 0) { throw "TUnit checks failed ($LASTEXITCODE)" }
-          dotnet build ModLoader/ModLoaderIndex.csproj -c Release
-          if ($LASTEXITCODE -ne 0) { throw "ModLoader index tool build failed ($LASTEXITCODE)" }
+        run: dotnet test --project AlwaysOfficial.Tests/AlwaysOfficial.Tests.csproj -c Release
+
+      - name: Build and package x86 plugin
+        run: dotnet publish AlwaysOfficial/AlwaysOfficial.csproj -c Release
+
       - uses: actions/upload-artifact@v4
         with:
           name: AlwaysOfficial-win-x86
-          path: dist/
+          path: |
+            dist/AlwaysOfficial.dll
+            dist/AlwaysOfficial-standalone.zip
+
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: pwsh
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $existing = gh release view $env:GITHUB_REF_NAME --json isDraft
-          if ($LASTEXITCODE -eq 0) {
-            if (($existing | ConvertFrom-Json).isDraft) { throw 'A draft already exists for this tag; resolve it before retrying.' }
-            Write-Host 'Release already published; leaving its immutable assets unchanged.'
-            exit 0
-          }
-          # Upload every asset while the release is a draft, before immutability applies.
-          gh release create $env:GITHUB_REF_NAME dist/AlwaysOfficial.dll dist/AlwaysOfficial.pdb dist/AlwaysOfficial-modloader.zip dist/AlwaysOfficial-standalone.zip --verify-tag --generate-notes --draft
-          if ($LASTEXITCODE -ne 0) { throw 'Release creation failed' }
-          $prerelease = if ($env:GITHUB_REF_NAME.Contains('-')) { 'true' } else { 'false' }
-          gh release edit $env:GITHUB_REF_NAME --draft=false "--prerelease=$prerelease"
-          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }
-
-  pages:
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    concurrency:
-      group: modloader-pages
-      cancel-in-progress: false
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-        id: pages
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-      - name: Generate the ModLoader feed from the latest release
-        run: dotnet run --project ModLoader/ModLoaderIndex.csproj -c Release -- site
-        env:
-          GH_TOKEN: ${{ github.token }}
-      - uses: actions/upload-pages-artifact@v4
-        with:
-          path: site
-      - uses: actions/deploy-pages@v4
-        id: deployment
+          $version = (Get-Item dist/AlwaysOfficial.dll).VersionInfo.ProductVersion -replace '\+.*$', ''
+          $tag = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { "v$version" }
+          gh release create $tag dist/AlwaysOfficial.dll dist/AlwaysOfficial-standalone.zip --target $env:GITHUB_SHA --generate-notes "--prerelease=$($tag.Contains('-'))"

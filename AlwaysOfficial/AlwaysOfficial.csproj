@@ -10,6 +10,7 @@
         <RootNamespace>AlwaysOfficial</RootNamespace>
         <AssemblyName>AlwaysOfficial</AssemblyName>
         <Version>0.1.0</Version>
+        <Version Condition="'$(GITHUB_REF_TYPE)' == 'tag' and $([System.String]::Copy('$(GITHUB_REF_NAME)').StartsWith('v'))">$([System.String]::Copy('$(GITHUB_REF_NAME)').Substring(1))</Version>
         <AssemblyTitle>Always Official</AssemblyTitle>
         <Product>Always Official</Product>
         <Company>BigBang1112</Company>
@@ -49,8 +50,7 @@
         dotnet publish AlwaysOfficial -c Release [-p:Version=0.1.0] [-o <dir>]
             bin\Release\net10.0\win-x86\publish\ (or <dir>): AlwaysOfficial.dll and d3d9.dll (standalone
             loader), with PDBs.
-            dist\ (repository root): those DLLs, AlwaysOfficial-modloader.zip and
-            AlwaysOfficial-standalone.zip.
+            dist\ (repository root): those DLLs and AlwaysOfficial-standalone.zip.
 
         dotnet publish AlwaysOfficial -c Release -p:NativeTestBuild=true
             bin\Release-NativeTests\net10.0\win-x86\publish\: the same hooks plus a test-only export, for
@@ -155,10 +155,9 @@
         <AlwaysOfficialPrependPath Folder="$(_AlwaysOfficialVsInstaller)" />
     </Target>
 
-    <!-- Both distribution packages, plus loose files for development and the release. -->
+    <!-- Standalone package, plus loose files for development and the release. -->
     <Target Name="AlwaysOfficialPackage" AfterTargets="Publish" DependsOnTargets="BuildStandaloneProxy" Condition="'$(NativeTestBuild)' != 'true'">
         <PropertyGroup>
-            <_ModLoaderStaging>$(AlwaysOfficialPackageStaging)modloader\</_ModLoaderStaging>
             <_StandaloneStaging>$(AlwaysOfficialPackageStaging)standalone\</_StandaloneStaging>
         </PropertyGroup>
         <ItemGroup>
@@ -167,12 +166,9 @@
         </ItemGroup>
 
         <RemoveDir Directories="$(AlwaysOfficialPackageStaging)" />
-        <!-- The ModLoader feed requires the archive to contain only the DLL at its root. -->
-        <Copy SourceFiles="$(PublishDir)$(AssemblyName).dll" DestinationFolder="$(_ModLoaderStaging)" />
         <Copy SourceFiles="$(PublishDir)$(AssemblyName).dll;$(PublishDir)d3d9.dll" DestinationFolder="$(_StandaloneStaging)" />
 
         <Copy SourceFiles="@(_DistFile)" DestinationFolder="$(DistDir)" />
-        <ZipDirectory SourceDirectory="$(_ModLoaderStaging)" DestinationFile="$(DistDir)$(AssemblyName)-modloader.zip" Overwrite="true" />
         <ZipDirectory SourceDirectory="$(_StandaloneStaging)" DestinationFile="$(DistDir)$(AssemblyName)-standalone.zip" Overwrite="true" />
         <Message Importance="high" Text="$(AssemblyName) $(Version) packaged in $(DistDir)" />
     </Target>
