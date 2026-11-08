@@ -157,9 +157,9 @@ internal static unsafe class OfficialHooks
 
                 *status = next;
             }
-            else if (*status is not (0 or 15 or 16))
+            else if (*status is not (0 or 8 or 15 or 16))
             {
-                // A normal frame or pause/resume does not end the metadata session.
+                // Normal frames, Save Replay (8), and pause/resume can continue the same run.
                 ReplayMetadata.EndRun();
             }
         }

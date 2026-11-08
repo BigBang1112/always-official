@@ -23,7 +23,7 @@ This mod stores additional data in the ghosts:
 
 - Version of the mod
 - Carried-over accel/brake input status
-- Ghost start/end timestamps in milliseconds
+- Timestamps of the race start and finish in milliseconds
 - Indication whether the run entered official mode
 
 ## Build

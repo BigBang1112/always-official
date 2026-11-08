@@ -42,10 +42,14 @@ internal sealed class ReplayMetadataSession
 
     public void Start(long timestamp)
     {
-        if (run.StartedAt == 0)
+        if (run.StartedAt != 0)
         {
-            run.StartedAt = timestamp;
+            // Another Go without EndRun is a new attempt like Restart -> ResetRaceLocal
+            // OnStartLine restarts the replay after this transition, so its new ghost gets the fresh run
+            EndRun();
         }
+
+        run.StartedAt = timestamp;
     }
 
     public void Stop(long timestamp)

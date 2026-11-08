@@ -81,20 +81,28 @@ internal static unsafe class ReplayMetadata
     {
         try
         {
-            var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            var race = OfficialHooks.CurrentRace;
-            if (race != 0 && player == GameFunctions.GetLocalPlayerInfo(race))
+            // Check the transition first, it only needs the player's current state at +0x314
+            var previous = Memory.ReadField<int>(player, 0x314);
+            var go = previous == 0 && state == 1;
+            var finish = previous == 1 && state == 2;
+
+            if (go || finish)
             {
-                var previous = Memory.ReadField<int>(player, 0x314);
-                lock (gate)
+                var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                var race = OfficialHooks.CurrentRace;
+
+                if (race != 0 && player == GameFunctions.GetLocalPlayerInfo(race))
                 {
-                    if (previous == 0 && state == 1)
+                    lock (gate)
                     {
-                        session.Start(timestamp);
-                    }
-                    else if (previous == 1 && state == 2)
-                    {
-                        session.Stop(timestamp);
+                        if (go)
+                        {
+                            session.Start(timestamp);
+                        }
+                        else
+                        {
+                            session.Stop(timestamp);
+                        }
                     }
                 }
             }

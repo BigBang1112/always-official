@@ -9,7 +9,6 @@ public class ReplayMetadataSessionTests
         session.StartRecord(1);
         await Assert.That(ReadRunTimes(Encode(session, 1))).IsEqualTo((0L, 0L));
         session.Start(100);
-        session.Start(150);
         await Assert.That(ReadRunTimes(Encode(session, 1))).IsEqualTo((100L, 0L));
         session.Stop(200);
         session.Stop(250);
@@ -30,6 +29,22 @@ public class ReplayMetadataSessionTests
         using var reader = new BinaryReader(new MemoryStream(bytes));
         reader.BaseStream.Position = 37; // Framing, format, flags, 0.1.0 version and commit.
         return (reader.Read7BitEncodedInt64(), (bytes[13] & 8) != 0 ? reader.Read7BitEncodedInt64() : 0);
+    }
+
+    [Test]
+    public async Task RestartWithoutEndRunGetsItsOwnTimestamps()
+    {
+        // Pause menu Restart resets the race without a Run status that ends the session,
+        // OnStartLine then reports Go before restarting the replay recording.
+        var session = new ReplayMetadataSession();
+        session.Start(100);
+        session.StartRecord(1);
+        session.Start(300);
+        session.StartRecord(2);
+        session.Stop(400);
+        session.EndRun();
+        await Assert.That(ReadRunTimes(Encode(session, 1))).IsEqualTo((100L, 0L));
+        await Assert.That(ReadRunTimes(Encode(session, 2))).IsEqualTo((300L, 400L));
     }
 
     [Test]

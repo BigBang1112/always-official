@@ -210,6 +210,13 @@ internal static unsafe partial class NativeFixture
         var manualGhost = recordedGhost;
         run(gameRace, &context, &status, 0);
         Transition(1);
+        // Opening Save Replay reports status 8. Cancelling resumes the same attempt,
+        // without another Go transition or a replacement recording.
+        raceStatus = 8;
+        run(gameRace, &context, &status, 0);
+        Check(status == 8, "Save Replay status was not forwarded");
+        raceStatus = 0;
+        run(gameRace, &context, &status, 0);
         Transition(2);
         EmitButton(0, true);
         EmitButton(1, true);
@@ -251,7 +258,6 @@ internal static unsafe partial class NativeFixture
         CheckMetadata(archive, retryGhost, 3, true, finished: true);
         CheckMetadata(archive, replacementGhost, 3, true, finished: true);
         CheckMetadata(archive, manualGhost, 0, finished: true);
-        CheckMetadata(archive, recordedGhost, 0);
 
         CheckArchiveUnchanged(archive, (nint)0x123456); // Untracked or loaded nodes.
         Field<int>(archive, 12) = 1;
