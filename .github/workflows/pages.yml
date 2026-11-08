@@ -44,13 +44,20 @@ jobs:
           mkdir -p site/modloader
           gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --paginate --slurp -H 'Accept: application/vnd.github.text+json' |
             jq -e --arg homepage "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" '
-              add | map(select(.draft == false and .prerelease == false)) |
+              def modloader_archive:
+                (.tag_name | ltrimstr("v")) as $version |
+                first(.assets[]? | select(.name == "AlwaysOfficial-modloader.v\($version).zip")) //
+                first(.assets[]? | select(.name == "AlwaysOfficial-modloader.zip")) // null;
+
+              add | map(select(
+                .draft == false and .prerelease == false and
+                (modloader_archive != null)
+              )) |
               max_by(.published_at) as $release |
               if $release == null then
                 {api: 1, game: "TmForever", products: {}}
               else
-                (first($release.assets[] | select(.name == "AlwaysOfficial-modloader.zip")) //
-                  error("Release has no AlwaysOfficial-modloader.zip")) as $archive |
+                ($release | modloader_archive) as $archive |
                 if (($archive.digest // "") | test("^sha256:[0-9a-fA-F]{64}$")) then
                   {
                     api: 1,

@@ -35,7 +35,7 @@ dotnet publish AlwaysOfficial -c Release [-o <dir>]
 ```
 
 - `AlwaysOfficial\bin\Release\net10.0\win-x86\publish\` (or `<dir>`): `AlwaysOfficial.dll` and `d3d9.dll`, with PDBs.
-- `dist\`: the same DLLs, `AlwaysOfficial-modloader.zip` (mod DLL only), and `AlwaysOfficial-standalone.zip` (both DLLs, to place next to `TmForever.exe`).
+- `dist\`: the same DLLs, `AlwaysOfficial-modloader.v<version>.zip` (mod DLL only), and `AlwaysOfficial-standalone.v<version>.zip` (both DLLs, to place next to `TmForever.exe`).
 
 ## Debugging in VS Code
 

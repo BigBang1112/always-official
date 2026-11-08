@@ -50,8 +50,8 @@
         dotnet publish AlwaysOfficial -c Release [-p:Version=0.1.0] [-o <dir>]
             bin\Release\net10.0\win-x86\publish\ (or <dir>): AlwaysOfficial.dll and d3d9.dll (standalone
             loader), with PDBs.
-            dist\ (repository root): those DLLs, AlwaysOfficial-modloader.zip and
-            AlwaysOfficial-standalone.zip.
+            dist\ (repository root): those DLLs, AlwaysOfficial-modloader.v<Version>.zip and
+            AlwaysOfficial-standalone.v<Version>.zip.
 
         dotnet publish AlwaysOfficial -c Release -p:NativeTestBuild=true
             bin\Release-NativeTests\net10.0\win-x86\publish\: the same hooks plus a test-only export, for
@@ -172,8 +172,8 @@
         <Copy SourceFiles="$(PublishDir)$(AssemblyName).dll;$(PublishDir)d3d9.dll" DestinationFolder="$(_StandaloneStaging)" />
 
         <Copy SourceFiles="@(_DistFile)" DestinationFolder="$(DistDir)" />
-        <ZipDirectory SourceDirectory="$(_ModLoaderStaging)" DestinationFile="$(DistDir)$(AssemblyName)-modloader.zip" Overwrite="true" />
-        <ZipDirectory SourceDirectory="$(_StandaloneStaging)" DestinationFile="$(DistDir)$(AssemblyName)-standalone.zip" Overwrite="true" />
+        <ZipDirectory SourceDirectory="$(_ModLoaderStaging)" DestinationFile="$(DistDir)$(AssemblyName)-modloader.v$(Version).zip" Overwrite="true" />
+        <ZipDirectory SourceDirectory="$(_StandaloneStaging)" DestinationFile="$(DistDir)$(AssemblyName)-standalone.v$(Version).zip" Overwrite="true" />
         <Message Importance="high" Text="$(AssemblyName) $(Version) packaged in $(DistDir)" />
     </Target>
 
