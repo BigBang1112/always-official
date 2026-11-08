@@ -90,6 +90,11 @@ internal static unsafe partial class NativeFixture
             ((delegate* unmanaged[Stdcall]<nint, uint>)(*(nint**)instance)[2])(instance);
             var mod = Win32.GetModuleHandle("AlwaysOfficial.dll");
             Check(mod != 0 && NativeLibrary.TryGetExport(mod, "ModBoot", out _), "Proxy did not load the adjacent mod");
+            // ModBoot creates this mutex; the proxy must have waited for it before Direct3DCreate9 returned.
+            var mutex = Win32.CreateMutex(0, false, $"Local\\AlwaysOfficial_{Win32.GetCurrentProcessId()}");
+            var booted = Marshal.GetLastPInvokeError() == Win32.ERROR_ALREADY_EXISTS;
+            Win32.CloseHandle(mutex);
+            Check(booted, "Direct3DCreate9 returned before the mod booted");
             return;
         }
         var production = scenario == nameof(NativeTests.DistributedDllLoadsAndForwards);
@@ -101,6 +106,7 @@ internal static unsafe partial class NativeFixture
         Check(testExport != production, "Test-only export must be absent from the distributed DLL");
         var create = (delegate* unmanaged[Stdcall]<uint, nint>)NativeLibrary.GetExport(dll, "Direct3DCreate9");
         Check(NativeLibrary.GetExport(dll, "ModBoot") != 0, "ModBoot export is missing");
+        Check(NativeLibrary.TryGetExport(dll, "ModWaitBooted", out _), "ModWaitBooted export is missing (the standalone proxy needs it)");
         var d3d = create(32); // D3D_SDK_VERSION; synchronizes with the shim's boot thread.
         Check(d3d != 0, "Direct3DCreate9 forwarding failed");
         var release = (delegate* unmanaged[Stdcall]<nint, uint>)(*(nint**)d3d)[2];

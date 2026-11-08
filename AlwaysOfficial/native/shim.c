@@ -4,7 +4,8 @@
 //    (/ENTRY:ModEntry in the .csproj). It runs the CRT and AOT start-up first, then starts the
 //    boot thread. Managed code never runs under the loader lock: the boot thread waits for it.
 // 2. STANDALONE_PROXY builds a separate d3d9.dll that loads the adjacent AlwaysOfficial.dll
-//    and forwards Direct3D to Windows. The mod retains forwarding exports for compatibility.
+//    and forwards Direct3D to Windows. The mod boots itself; the proxy only waits for that boot
+//    (ModWaitBooted). The mod retains forwarding exports for compatibility.
 // 3. Naked forwarding stubs: they leave every register and stack argument as the caller left them,
 //    so the exports with undocumented signatures forward correctly.
 //
@@ -52,37 +53,56 @@ static HMODULE g_module;
 // and the C# side (ILC's symbol decoration on x86 is its own business).
 typedef int(WINAPI* ModBootFn)(HMODULE module);
 
+// ModWaitBooted below: the proxy's way to wait for the mod's own boot.
+typedef void(__cdecl* ModWaitBootedFn)(void);
+
 static volatile long g_bootState; // 0 not started, 1 booting, 2 done
 static DWORD g_bootThread;
 
-// Runs the managed boot exactly once. Called from the boot thread and from the d3d9 exports,
-// whichever comes first; the others wait for it (at most 5 s).
+#ifdef STANDALONE_PROXY
+// Loads AlwaysOfficial.dll beside this proxy, independently of the process working directory.
+static HMODULE loadAdjacentMod(void) {
+    static WCHAR path[32768];
+    DWORD length = GetModuleFileNameW(g_module, path, 32768);
+    if (!length || length >= 32768) return 0;
+    while (length && path[length - 1] != L'\\') length--;
+    const WCHAR* name = L"AlwaysOfficial.dll";
+    if (!length || length + 19 >= 32768) return 0;
+    for (DWORD i = 0; (path[length + i] = name[i]) != 0; i++) {}
+    return LoadLibraryW(path);
+}
+#endif
+
+// Runs the boot exactly once. Called from the boot thread and from the d3d9 exports, whichever
+// comes first; the others wait for it (at most 5 s). The mod's boot is the managed ModBoot; the
+// proxy's boot loads the mod, whose own entry point starts that, and waits for it to finish.
 static void ensureBooted(void) {
     if (g_bootState == 2) return;
     if (_InterlockedCompareExchange(&g_bootState, 1, 0) == 0) {
         g_bootThread = GetCurrentThreadId();
-        HMODULE mod = g_module;
 #ifdef STANDALONE_PROXY
-        // Resolve beside this proxy, independently of the process working directory.
-        static WCHAR path[32768];
-        DWORD length = GetModuleFileNameW(g_module, path, 32768);
-        if (length && length < 32768) {
-            while (length && path[length - 1] != L'\\') length--;
-            const WCHAR* name = L"AlwaysOfficial.dll";
-            if (length && length + 19 < 32768) {
-                for (DWORD i = 0; (path[length + i] = name[i]) != 0; i++) {}
-                mod = LoadLibraryW(path);
-            } else mod = 0;
-        } else mod = 0;
+        HMODULE mod = loadAdjacentMod();
+        ModWaitBootedFn wait = mod ? (ModWaitBootedFn)GetProcAddress(mod, "ModWaitBooted") : 0;
+        if (wait) wait();
+#else
+        ModBootFn boot = (ModBootFn)GetProcAddress(g_module, "ModBoot");
+        if (boot) boot(g_module);
 #endif
-        ModBootFn boot = mod ? (ModBootFn)GetProcAddress(mod, "ModBoot") : 0;
-        if (boot) boot(mod);
         _InterlockedExchange(&g_bootState, 2);
         return;
     }
     if (g_bootThread == GetCurrentThreadId()) return; // re-entered from inside the boot
     for (int waited = 0; g_bootState != 2 && waited < 5000; waited++) Sleep(1);
 }
+
+#ifndef STANDALONE_PROXY
+// Returns once ModBoot has finished, running it on the calling thread if the boot thread has not
+// started it yet. Lets the standalone proxy keep its "booted before Direct3DCreate9 returns"
+// promise without booting the mod a second time.
+__declspec(dllexport) void __cdecl ModWaitBooted(void) {
+    ensureBooted();
+}
+#endif
 
 static DWORD WINAPI bootThread(void* unused) {
     (void)unused;
