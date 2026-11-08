@@ -4,15 +4,15 @@
       .NET 10 SDK and Visual Studio (or its Build Tools) with "Desktop development with C++" (Native AOT
       links with link.exe, cl.exe compiles native\shim.c).
 
-        dotnet publish src/AlwaysOfficial -c Release [-p:Version=0.1.0] [-o <dir>]
+        dotnet publish AlwaysOfficial -c Release [-p:Version=0.1.0] [-o <dir>]
             bin\Release\net10.0\win-x86\publish\ (or <dir>): AlwaysOfficial.dll and d3d9.dll (standalone
             loader), with PDBs.
-            dist\ (repository root): those DLLs, version.yaml, AlwaysOfficial-modloader.zip and
+            dist\ (repository root): those DLLs, AlwaysOfficial-modloader.zip and
             AlwaysOfficial-standalone.zip.
 
-        dotnet publish src/AlwaysOfficial -c Release -p:NativeTestBuild=true
+        dotnet publish AlwaysOfficial -c Release -p:NativeTestBuild=true
             bin\Release-NativeTests\net10.0\win-x86\publish\: the same hooks plus a test-only export, for
-            tests/AlwaysOfficial.Tests. Separate bin\ and obj\ folders keep it from overwriting the real build.
+            AlwaysOfficial.Tests. Separate bin\ and obj\ folders keep it from overwriting the real build.
     -->
     <PropertyGroup Condition="'$(NativeTestBuild)' == 'true'">
         <OutputPath>bin\$(Configuration)-NativeTests\</OutputPath>
@@ -20,9 +20,8 @@
     </PropertyGroup>
 
     <PropertyGroup>
-        <RepositoryRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\..\'))</RepositoryRoot>
+        <RepositoryRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\'))</RepositoryRoot>
         <DistDir>$(RepositoryRoot)dist\</DistDir>
-        <ModLoaderMetadataDir>$(RepositoryRoot)modloader\</ModLoaderMetadataDir>
         <AlwaysOfficialPackageStaging>$(MSBuildProjectDirectory)\obj\$(Configuration)\package\</AlwaysOfficialPackageStaging>
     </PropertyGroup>
 
@@ -44,13 +43,14 @@
     <UsingTask TaskName="AlwaysOfficialCheckGameFolder" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
         <ParameterGroup>
             <Folder ParameterType="System.String" Required="true" />
+            <AssemblyName ParameterType="System.String" Required="true" />
+            <Product ParameterType="System.String" Required="true" />
         </ParameterGroup>
         <Task>
             <Using Namespace="System.Diagnostics" />
             <Code Type="Method" Language="cs"><![CDATA[
             public override bool Execute()
             {
-                const string name = "AlwaysOfficial";
                 var running = Process.GetProcessesByName("TmForever");
                 if (running.Length > 0)
                 {
@@ -63,16 +63,16 @@
                 }
 
                 var proxy = Path.Combine(Folder, "d3d9.dll");
-                if (File.Exists(proxy) && FileVersionInfo.GetVersionInfo(proxy).ProductName != name &&
+                if (File.Exists(proxy) && FileVersionInfo.GetVersionInfo(proxy).ProductName != Product &&
                     !Encoding.ASCII.GetString(File.ReadAllBytes(proxy)).Contains("AlwaysOfficialStandaloneProxy"))
                 {
                     Log.LogError(proxy + " belongs to another mod (it is not the Always Official standalone loader). Left alone; remove it or use the ModLoader instead.");
                 }
 
-                var mod = Path.Combine(Folder, name + ".dll");
-                if (File.Exists(mod) && FileVersionInfo.GetVersionInfo(mod).ProductName != name)
+                var mod = Path.Combine(Folder, AssemblyName + ".dll");
+                if (File.Exists(mod) && FileVersionInfo.GetVersionInfo(mod).ProductName != Product)
                 {
-                    Log.LogError(mod + " is not Always Official. Left alone; remove it first.");
+                    Log.LogError(mod + " is not " + Product + ". Left alone; remove it first.");
                 }
 
                 return !Log.HasLoggedErrors;
@@ -85,7 +85,7 @@
          not overwrite another mod's d3d9.dll or files the running game has loaded. Runs before the build,
          so nothing is compiled or written when a check fails. -->
     <Target Name="AlwaysOfficialCheckGameFolder" BeforeTargets="Build;PrepareForPublish" Condition="'$(NativeTestBuild)' != 'true' and Exists('$([MSBuild]::EnsureTrailingSlash($(PublishDir)))TmForever.exe')">
-        <AlwaysOfficialCheckGameFolder Folder="$(PublishDir)" />
+        <AlwaysOfficialCheckGameFolder Folder="$(PublishDir)" AssemblyName="$(AssemblyName)" Product="$(Product)" />
         <Message Importance="high" Text="Publishing into game folder $(PublishDir): game closed, no foreign d3d9.dll or AlwaysOfficial.dll." />
     </Target>
 
@@ -116,7 +116,6 @@
         <Copy SourceFiles="$(PublishDir)$(AssemblyName).dll;$(PublishDir)d3d9.dll" DestinationFolder="$(_StandaloneStaging)" />
 
         <Copy SourceFiles="@(_DistFile)" DestinationFolder="$(DistDir)" />
-        <Copy SourceFiles="$(ModLoaderMetadataDir)version.yaml" DestinationFolder="$(DistDir)" />
         <ZipDirectory SourceDirectory="$(_ModLoaderStaging)" DestinationFile="$(DistDir)$(AssemblyName)-modloader.zip" Overwrite="true" />
         <ZipDirectory SourceDirectory="$(_StandaloneStaging)" DestinationFile="$(DistDir)$(AssemblyName)-standalone.zip" Overwrite="true" />
         <Message Importance="high" Text="$(AssemblyName) $(Version) packaged in $(DistDir)" />

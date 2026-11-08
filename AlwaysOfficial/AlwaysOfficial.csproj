@@ -8,6 +8,10 @@
         <RootNamespace>AlwaysOfficial</RootNamespace>
         <AssemblyName>AlwaysOfficial</AssemblyName>
         <Version>0.1.0</Version>
+        <AssemblyTitle>Always Official</AssemblyTitle>
+        <Product>Always Official</Product>
+        <Company>BigBang1112</Company>
+        <Authors>BigBang1112</Authors>
         <DefineConstants Condition="'$(NativeTestBuild)' == 'true'">$(DefineConstants);NATIVE_TESTS</DefineConstants>
         <RuntimeIdentifier>win-x86</RuntimeIdentifier>
         <PublishAot>true</PublishAot>

@@ -1,6 +1,6 @@
+using System.Diagnostics;
 using System.IO.Compression;
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using AlwaysOfficial.ModLoaderIndex;
 
@@ -25,14 +25,12 @@ public class ModLoaderIndexTests
     public async Task FeedsFromPublishedReleases()
     {
         var root = NativeTests.FindRoot();
-        var yaml = await File.ReadAllBytesAsync(Path.Combine(root, "modloader", "version.yaml"));
         var files = new Dictionary<string, byte[]>();
         var releasesJson = new List<object>();
         foreach (var version in new[] { "0.1.0", "0.2.0-beta.1", "0.3.0" })
         {
             var tag = $"v{version}";
             files[$"{tag}/{IndexBuilder.ArchiveName}"] = Archive(version);
-            files[$"{tag}/{IndexBuilder.MetadataName}"] = yaml;
             releasesJson.Add(new
             {
                 tag_name = tag,
@@ -41,28 +39,28 @@ public class ModLoaderIndexTests
                 assets = new[]
                 {
                     new { name = IndexBuilder.ArchiveName, url = $"{tag}/{IndexBuilder.ArchiveName}", browser_download_url = $"https://github.com/example/mod/releases/download/{tag}/{IndexBuilder.ArchiveName}" },
-                    new { name = IndexBuilder.MetadataName, url = $"{tag}/{IndexBuilder.MetadataName}", browser_download_url = $"https://github.com/example/mod/releases/download/{tag}/{IndexBuilder.MetadataName}" },
                 },
             });
         }
 
         releasesJson.Add(new { tag_name = "v0.0.1", draft = false, prerelease = false, assets = Array.Empty<object>() });
-        using var json = JsonDocument.Parse(JsonSerializer.Serialize(releasesJson));
+        var releases = JsonSerializer.Deserialize(JsonSerializer.Serialize(releasesJson), IndexJsonContext.Default.ReleaseArray)!;
         var site = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
         try
         {
-            await IndexBuilder.BuildAsync(IndexBuilder.ParseReleases(json.RootElement),
+            await IndexBuilder.BuildAsync(releases,
                 asset => Task.FromResult(files[asset.Url]), Path.Combine(root, "modloader", "index.json"), site);
 
             using var stable = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(site, "modloader", "index.json")));
             using var beta = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(site, "modloader", "beta", "index.json")));
-            var product = stable.RootElement.GetProperty("products").GetProperty("AlwaysOfficial");
+            var product = stable.RootElement.GetProperty("products").GetProperty(IndexBuilder.ProductId);
             await Assert.That(stable.RootElement.GetProperty("api").GetInt32()).IsEqualTo(1);
             await Assert.That(stable.RootElement.GetProperty("game").GetString()).IsEqualTo("TmForever");
             await Assert.That(product.GetProperty("name").GetString()).IsEqualTo("Always Official");
+            await Assert.That(product.TryGetProperty("version_template", out _)).IsFalse();
 
             var stableVersions = product.GetProperty("versions").EnumerateObject().Select(p => p.Name).ToList();
-            var betaVersions = beta.RootElement.GetProperty("products").GetProperty("AlwaysOfficial").GetProperty("versions")
+            var betaVersions = beta.RootElement.GetProperty("products").GetProperty(IndexBuilder.ProductId).GetProperty("versions")
                 .EnumerateObject().Select(p => p.Name).ToList();
             await Assert.That(stableVersions).IsEquivalentTo(["0.1.0"]);
             await Assert.That(betaVersions).IsEquivalentTo(["0.1.0", "0.2.0-beta.1"]);
@@ -101,25 +99,31 @@ public class ModLoaderIndexTests
             zip.CreateEntry("d3d9.dll");
         }
 
-        var release = new Release("v1.0.0", false, false,
-        [
-            new ReleaseAsset(IndexBuilder.ArchiveName, "zip", "https://example.com/a.zip", null),
-            new ReleaseAsset(IndexBuilder.MetadataName, "yaml", "https://example.com/version.yaml", null),
-        ]);
-        var yaml = Encoding.UTF8.GetBytes("executable: AlwaysOfficial.dll\n");
-        await Assert.That(() => IndexBuilder.BuildAsync([release],
-                asset => Task.FromResult(asset.Url == "zip" ? stream.ToArray() : yaml), "unused.json", "unused"))
+        var release = new Release("v1.0.0", false, false, [new ReleaseAsset(IndexBuilder.ArchiveName, "zip", "https://example.com/a.zip")]);
+        var template = Path.Combine(NativeTests.FindRoot(), "modloader", "index.json");
+        await Assert.That(() => IndexBuilder.BuildAsync([release], _ => Task.FromResult(stream.ToArray()), template, "unused"))
             .Throws<InvalidDataException>();
     }
 
     [Test]
-    [DisplayName("Unsupported version metadata is rejected")]
-    [Arguments("executable: Other.dll\n")]
-    [Arguments("executable: AlwaysOfficial.dll\nname: x\n")]
-    [Arguments("executable: AlwaysOfficial.dll\ndependencies:\n  - id: CoreMod\n")]
-    [Arguments("executable: AlwaysOfficial.dll\ndependencies:\n  - version: 1\n")]
-    public async Task RejectsInvalidMetadata(string yaml)
+    [DisplayName("Feed templates without a valid version_template are rejected")]
+    [Arguments("\"executable\": \"AlwaysOfficial.dll\"", "\"executable\": \"Other.dll\"")]
+    [Arguments("\"version_template\"", "\"unknown_template\"")]
+    [Arguments(", \"version\": \"^1.0.1\"", "")]
+    public async Task RejectsInvalidTemplate(string original, string replacement)
     {
-        await Assert.That(() => IndexBuilder.ReadVersionMetadata(yaml)).Throws<InvalidDataException>();
+        var text = await File.ReadAllTextAsync(Path.Combine(NativeTests.FindRoot(), "modloader", "index.json"));
+        await Assert.That(text).Contains(original);
+        var template = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".json");
+        await File.WriteAllTextAsync(template, text.Replace(original, replacement));
+        try
+        {
+            await Assert.That(() => IndexBuilder.BuildAsync([], _ => throw new UnreachableException(), template, "unused"))
+                .Throws<Exception>();
+        }
+        finally
+        {
+            File.Delete(template);
+        }
     }
 }

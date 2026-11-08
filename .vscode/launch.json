@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Always Official (Debug)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${config:alwaysOfficial.gameDirectory}/TmForever.exe",
+      "cwd": "${config:alwaysOfficial.gameDirectory}",
+      "args": [],
+      "preLaunchTask": "Always Official: publish Debug into game folder"
+    }
+  ]
+}

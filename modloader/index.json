@@ -8,6 +8,12 @@
       "type": "modification",
       "description": "After entering official mode manually, restart subsequent solo runs in official mode without repeating the confirmation.",
       "homepage": "https://github.com/BigBang1112/always-official",
+      "version_template": {
+        "executable": "AlwaysOfficial.dll",
+        "dependencies": [
+          { "id": "CoreMod", "version": "^1.0.1" }
+        ]
+      },
       "versions": {}
     }
   }

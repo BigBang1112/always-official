@@ -1,0 +1,24 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      // Publishes AlwaysOfficial.dll and the d3d9.dll loader (with PDBs) straight into the game folder.
+      // The game folder comes from the "alwaysOfficial.gameDirectory" setting; see README.md.
+      "label": "Always Official: publish Debug into game folder",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "publish",
+        "${workspaceFolder}/AlwaysOfficial/AlwaysOfficial.csproj",
+        "-c",
+        "Debug",
+        "-o",
+        "${config:alwaysOfficial.gameDirectory}",
+        "-p:GenerateFullPaths=true",
+        "-consoleLoggerParameters:NoSummary"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "build"
+    }
+  ]
+}

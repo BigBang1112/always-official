@@ -4,7 +4,7 @@
 //
 // GITHUB_REPOSITORY is the default repository; GH_TOKEN, when set, authenticates the API calls.
 using System.Net.Http.Headers;
-using System.Text.Json;
+using System.Net.Http.Json;
 using System.Text.RegularExpressions;
 using AlwaysOfficial.ModLoaderIndex;
 
@@ -52,10 +52,9 @@ for (var page = 1; ; page++)
         return 1;
     }
 
-    using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
-    var batch = IndexBuilder.ParseReleases(json.RootElement).ToList();
+    var batch = await response.Content.ReadFromJsonAsync(IndexJsonContext.Default.ReleaseArray) ?? [];
     releases.AddRange(batch);
-    if (batch.Count < 100)
+    if (batch.Length < 100)
     {
         break;
     }

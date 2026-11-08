@@ -1,0 +1,4 @@
+{
+  // The C/C++ debugger only allows breakpoints in C/C++ files by default; the mod's code is C#.
+  "debug.allowBreakpointsEverywhere": true
+}

@@ -1,4 +1,0 @@
-executable: AlwaysOfficial.dll
-dependencies:
-  - id: CoreMod
-    version: ^1.0.1

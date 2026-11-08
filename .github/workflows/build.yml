@@ -31,7 +31,7 @@ jobs:
             }
             $versionArguments = @("-p:Version=$version")
           }
-          dotnet publish src/AlwaysOfficial/AlwaysOfficial.csproj -c Release @versionArguments
+          dotnet publish AlwaysOfficial/AlwaysOfficial.csproj -c Release @versionArguments
           if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed ($LASTEXITCODE)" }
           if ($versionArguments) {
             $actual = (Get-Item dist/AlwaysOfficial.dll).VersionInfo.ProductVersion -replace '\+.*$', ''
@@ -41,10 +41,10 @@ jobs:
         shell: pwsh
         run: |
           # The same hooks with one test-only image-base export, in its own bin/obj folders (outside dist/).
-          dotnet publish src/AlwaysOfficial/AlwaysOfficial.csproj -c Release -p:NativeTestBuild=true
+          dotnet publish AlwaysOfficial/AlwaysOfficial.csproj -c Release -p:NativeTestBuild=true
           if ($LASTEXITCODE -ne 0) { throw "native test DLL build failed ($LASTEXITCODE)" }
           # Both DLLs are published above; republishing would overwrite the versioned dist/ files.
-          dotnet test --project tests/AlwaysOfficial.Tests/AlwaysOfficial.Tests.csproj -c Release -p:PublishModForTests=false
+          dotnet test --project AlwaysOfficial.Tests/AlwaysOfficial.Tests.csproj -c Release -p:PublishModForTests=false
           if ($LASTEXITCODE -ne 0) { throw "TUnit checks failed ($LASTEXITCODE)" }
           dotnet build modloader/ModLoaderIndex/ModLoaderIndex.csproj -c Release
           if ($LASTEXITCODE -ne 0) { throw "ModLoader index tool build failed ($LASTEXITCODE)" }
@@ -65,7 +65,7 @@ jobs:
             exit 0
           }
           # Upload every asset while the release is a draft, before immutability applies.
-          gh release create $env:GITHUB_REF_NAME dist/AlwaysOfficial.dll dist/AlwaysOfficial.pdb dist/AlwaysOfficial-modloader.zip dist/AlwaysOfficial-standalone.zip dist/version.yaml --verify-tag --generate-notes --draft
+          gh release create $env:GITHUB_REF_NAME dist/AlwaysOfficial.dll dist/AlwaysOfficial.pdb dist/AlwaysOfficial-modloader.zip dist/AlwaysOfficial-standalone.zip --verify-tag --generate-notes --draft
           if ($LASTEXITCODE -ne 0) { throw 'Release creation failed' }
           $prerelease = if ($env:GITHUB_REF_NAME.Contains('-')) { 'true' } else { 'false' }
           gh release edit $env:GITHUB_REF_NAME --draft=false "--prerelease=$prerelease"

@@ -94,7 +94,7 @@ internal static unsafe partial class NativeFixture
         }
         var production = scenario == nameof(NativeTests.DistributedDllLoadsAndForwards);
         var path = production ? Path.Combine(root, "dist", "AlwaysOfficial.dll") : NativeTestDll;
-        Check(File.Exists(path), $"Missing {path}. Build the tests without -p:PublishModForTests=false, or publish first: dotnet publish src/AlwaysOfficial -c <test configuration>, and again with -p:NativeTestBuild=true");
+        Check(File.Exists(path), $"Missing {path}. Build the tests without -p:PublishModForTests=false, or publish first: dotnet publish AlwaysOfficial -c <test configuration>, and again with -p:NativeTestBuild=true");
         // Keep the DLL loaded until worker exit; Native AOT does not support unloading.
         var dll = NativeLibrary.Load(path);
         var testExport = NativeLibrary.TryGetExport(dll, "TestInstall", out var install);
