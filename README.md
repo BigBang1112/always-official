@@ -2,10 +2,14 @@
 
 Always Official is a TrackMania United Forever mod that keeps restarting official mode automatically after you jump into it once.
 
+The **Restart in Official Mode** feature came out a long time ago as Nadeo's first record leaderboard system in TrackMania. It was made opt-in most likely due to uncertainty, but the times have changed since and this feature made TMUF hunting experience just worse. So this mod reduces a few of the annoyances.
+
 - By default, race is still in offline mode
 - *Restart in Official Mode* starts official mode as usual
 - While in official mode: retire (full respawn) automatically starts official mode again
 - Input presses are carried over, so you dont have to re-press them again
+- Coppers are consumed only at the end of the countdown (`StartOfficialRecord`)
+  - ...so this is not a free Official Mode...
 
 It is the first C# mod integrated with TMF ModLoader (using NativeAOT).
 
