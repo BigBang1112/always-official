@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using AlwaysOfficial.Core;
@@ -40,6 +41,9 @@ internal static unsafe partial class NativeFixture
     [LibraryImport("kernel32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool FlushInstructionCache(nint process, nint address, nuint size);
+
+    private static string NativeTestDll => typeof(NativeFixture).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
+        .Single(a => a.Key == nameof(NativeTestDll)).Value!;
 
     private static nint At(uint address)
     {
@@ -89,8 +93,8 @@ internal static unsafe partial class NativeFixture
             return;
         }
         var production = scenario == nameof(NativeTests.DistributedDllLoadsAndForwards);
-        var path = Path.Combine(root, production ? "dist" : "build/native-tests", "AlwaysOfficial.dll");
-        Check(File.Exists(path), $"Missing {path}. Run build.ps1 -Tests first.");
+        var path = production ? Path.Combine(root, "dist", "AlwaysOfficial.dll") : NativeTestDll;
+        Check(File.Exists(path), $"Missing {path}. Build the tests without -p:PublishModForTests=false, or publish first: dotnet publish src/AlwaysOfficial -c <test configuration>, and again with -p:NativeTestBuild=true");
         // Keep the DLL loaded until worker exit; Native AOT does not support unloading.
         var dll = NativeLibrary.Load(path);
         var testExport = NativeLibrary.TryGetExport(dll, "TestInstall", out var install);

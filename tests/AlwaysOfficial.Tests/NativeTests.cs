@@ -99,7 +99,7 @@ public class NativeTests
     {
         for (DirectoryInfo? dir = new(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
         {
-            if (File.Exists(Path.Combine(dir.FullName, "build.ps1")))
+            if (File.Exists(Path.Combine(dir.FullName, "global.json")))
             {
                 return dir.FullName;
             }

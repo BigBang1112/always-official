@@ -17,9 +17,30 @@
         <Compile Include="../../src/AlwaysOfficial/Core/UserData.cs" Link="UserData.cs" />
         <Compile Include="../../src/AlwaysOfficial/Core/Memory.cs" Link="Memory.cs" />
         <Compile Include="../../src/AlwaysOfficial/Core/Win32.cs" Link="Win32.cs" />
+        <Compile Include="../../modloader/ModLoaderIndex/IndexBuilder.cs" Link="IndexBuilder.cs" />
     </ItemGroup>
         
     <ItemGroup>
         <PackageReference Include="TUnit" Version="1.81.10" />
     </ItemGroup>
+
+    <PropertyGroup>
+        <!-- Publish the mod (dist\) and its native test build before testing. Turn off with
+             -p:PublishModForTests=false when both are already published, e.g. a versioned CI build. -->
+        <PublishModForTests Condition="'$(PublishModForTests)' == ''">true</PublishModForTests>
+        <_ModProject>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\src\AlwaysOfficial\AlwaysOfficial.csproj'))</_ModProject>
+        <_DotnetHost>$(DOTNET_HOST_PATH)</_DotnetHost>
+        <_DotnetHost Condition="'$(_DotnetHost)' == ''">dotnet</_DotnetHost>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <AssemblyMetadata Include="NativeTestDll" Value="$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\src\AlwaysOfficial\bin\$(Configuration)-NativeTests\$(TargetFramework)\$(RuntimeIdentifier)\publish\AlwaysOfficial.dll'))" />
+    </ItemGroup>
+
+    <!-- A separate dotnet publish (not a ProjectReference): the native tests need the Native AOT DLLs, which
+         only publishing the mod produces, and restoring it with its own RID/AOT packages. -->
+    <Target Name="PublishModForTests" AfterTargets="Build" Condition="'$(PublishModForTests)' == 'true' and '$(DesignTimeBuild)' != 'true'">
+        <Exec Command="&quot;$(_DotnetHost)&quot; publish &quot;$(_ModProject)&quot; -c $(Configuration) -nologo" />
+        <Exec Command="&quot;$(_DotnetHost)&quot; publish &quot;$(_ModProject)&quot; -c $(Configuration) -nologo -p:NativeTestBuild=true" />
+    </Target>
 </Project>
