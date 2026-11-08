@@ -9,7 +9,7 @@
     <PropertyGroup Label="Assembly metadata">
         <RootNamespace>AlwaysOfficial</RootNamespace>
         <AssemblyName>AlwaysOfficial</AssemblyName>
-        <Version>0.1.0</Version>
+        <Version>0.1.1</Version>
         <Version Condition="'$(GITHUB_REF_TYPE)' == 'tag' and $([System.String]::Copy('$(GITHUB_REF_NAME)').StartsWith('v'))">$([System.String]::Copy('$(GITHUB_REF_NAME)').Substring(1))</Version>
         <AssemblyTitle>Always Official</AssemblyTitle>
         <Product>Always Official</Product>
