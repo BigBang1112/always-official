@@ -11,11 +11,28 @@ The **Restart in Official Mode** feature came out a long time ago as Nadeo's fir
 - Coppers are consumed only at the end of the countdown (`StartOfficialRecord`)
   - ...so this is not a free Official Mode mod...
 
-It is the first C# mod integrated with TMF ModLoader (using NativeAOT).
+It is the first C# mod integrated with TMF ModLoader (using NativeAOT, and only a little over 800kB).
 
 ## Installation
 
-TODO
+ModLoader is the recommended approach, as standalone can potentially collide with other mods.
+
+### ModLoader
+
+Close the ModLoader, open `%LOCALAPPDATA%\TMLoader\config.yaml` and add one of these URLs under `servers:`. Choose one of these:
+
+- `https://bigbang1112.cz/trackmania/tmf/modloader/`
+- `https://bigbang1112.github.io/always-official/modloader/`
+
+Second URL may be more up to date when new updates come, but won't include my other mods in the future.
+
+The mod should now appear in ModLoader where you can tick it. It should be compatible with all known mods.
+
+### Standalone
+
+If you don't like ModLoader (Competition Patch 2 is soon enforced and only on ModLoader so you will have to like it), BUT if you still want to install this mod standalone, you can.
+
+Download the latest `AlwaysOfficial-standalone.v*.zip` from [Releases](https://github.com/BigBang1112/always-official/releases) and extract it into your TMUF installation folder. That should be it.
 
 ## Data
 
